@@ -62,8 +62,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .big{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
 .kpi{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.uprow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;border:1px dashed var(--line);border-radius:8px;padding:8px;margin:2px 0}
 .uprow input[type=file]{flex:2 1 160px}
 .uprow select,.uprow .up-label{flex:1 1 90px;width:auto}
+.fld{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);min-width:0}
+.fld select,.fld input{min-width:0}
+.stephead{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.03em;margin-top:4px}
 .dirty{position:sticky;top:64px;z-index:4}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
 .modal .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:560px;width:100%;display:flex;flex-direction:column;gap:10px;max-height:85vh;overflow:auto}
@@ -174,12 +178,12 @@ function runBtn(stage, label) {
 function uploadRow(kind, id, opts) {
   opts = opts || {};
   const extra = kind === "component"
-    ? `<select class="up-source"><option value="ai">AI</option><option value="real">ảnh thật</option></select>
-       <select class="up-use">${(S.component_uses || []).map(u => `<option>${u}</option>`).join("")}</select>
-       <input class="up-label" placeholder="nhãn (hair, eyes...)">`
-    : `<input class="up-label" placeholder="nhãn (tuỳ chọn)">`;
-  return `<div class="row uprow" data-kind="${kind}" data-id="${esc(id)}">
-    <input type="file" class="up-file">${extra}
+    ? `<label class="fld" style="flex:1 1 80px">Nguồn ảnh<select class="up-source"><option value="ai">AI</option><option value="real">người thật</option></select></label>
+       <label class="fld" style="flex:1 1 80px">Dùng cho phần<select class="up-use">${(S.component_uses || []).map(u => `<option>${u}</option>`).join("")}</select></label>
+       <label class="fld" style="flex:1 1 100px">Nhãn (ghi chú)<input class="up-label" placeholder="vd: hair, eyes"></label>`
+    : `<label class="fld" style="flex:1 1 100px">Nhãn (tuỳ chọn)<input class="up-label" placeholder="để trống cũng được"></label>`;
+  return `<div class="uprow" data-kind="${kind}" data-id="${esc(id)}">
+    <label class="fld" style="flex:2 1 160px">Chọn file ảnh trên máy<input type="file" class="up-file"></label>${extra}
     <button data-act="do-upload">${esc(opts.label || "Tải lên")}</button></div>`;
 }
 
@@ -257,36 +261,49 @@ function charCard(c) {
     <button class="link" data-act="rm-comp" data-char="${c.id}" data-comp="${esc(cc.id)}">x</button></span>`).join(" ");
   return `<div class="tile"><div class="head"><input data-act="char-name" data-id="${c.id}" value="${esc(c.name)}" style="font-weight:700" data-dirty-skip>
       ${approveBadge("chars", c)}</div><input data-act="char-desc" data-id="${c.id}" value="${esc(c.desc)}" placeholder="mô tả ngắn (tuổi/nét)…" data-dirty-skip>
-    <div class="chips">${comps || '<span class="muted">chưa có ảnh thành phần</span>'}</div>
-    ${uploadRow("component", c.id, {label: "Thêm ảnh thành phần"})}
+    <div class="stephead">① Ảnh thành phần (mặt, tóc, thân, trang phục…)</div>
+    <p class="hint">Tải từng ảnh một — ảnh nào cho mặt/mắt phải chọn "AI" ở Nguồn ảnh. Có thể tải nhiều ảnh cho nhiều phần khác nhau.</p>
+    <div class="chips">${comps || '<span class="muted">chưa có ảnh thành phần nào</span>'}</div>
+    ${uploadRow("component", c.id, {label: "① Thêm ảnh thành phần"})}
+    <div class="stephead">② Ảnh nhân vật (AI ghép các thành phần ở trên lại)</div>
     ${portrait ? `<img class="media m34" src="${esc(src(portrait))}">` : '<div class="ph">chưa có ảnh nhân vật</div>'}
-    <div class="row">${itemBtn("portrait", c.id, portrait ? "Tạo lại ảnh" : "Tạo ảnh nhân vật", !!portrait)}</div>
-    ${uploadRow("portrait", c.id, {label: "Tải ảnh có sẵn"})}${takesRow("portrait", c.id)}
+    <div class="row">${itemBtn("portrait", c.id, portrait ? "② Tạo lại ảnh nhân vật" : "② Tạo ảnh nhân vật (tốn tiền)", !!portrait)}</div>
+    <p class="hint">Nếu đã có sẵn ảnh nhân vật (nền trắng) rồi thì tải lên ở đây thay vì bấm nút Tạo:</p>
+    ${uploadRow("portrait", c.id, {label: "② Tải ảnh có sẵn"})}${takesRow("portrait", c.id)}
     ${portrait ? chatPanel("portrait", c.id) : ""}
-    ${sheet ? `<img class="media m219" src="${esc(src(sheet))}">` : '<div class="ph">chưa có sheet 21:9</div>'}
-    <div class="row">${itemBtn("sheet", c.id, sheet ? "Tạo lại sheet" : "Tạo sheet 21:9", !!sheet)}</div>
-    ${uploadRow("sheet", c.id, {label: "Tải sheet có sẵn"})}${takesRow("sheet", c.id)}
+    <div class="stephead">③ Sheet 21:9 (bảng nhiều góc, dùng làm tham chiếu khi sinh video)</div>
+    ${sheet ? `<img class="media m219" src="${esc(src(sheet))}">` : '<div class="ph">chưa có sheet 21:9 — cần có ảnh nhân vật ở bước ② trước</div>'}
+    <div class="row">${itemBtn("sheet", c.id, sheet ? "③ Tạo lại sheet" : "③ Tạo sheet 21:9 (tốn tiền)", !!sheet)}</div>
+    <p class="hint">Nếu đã có sẵn sheet rồi thì tải lên ở đây thay vì bấm nút Tạo:</p>
+    ${uploadRow("sheet", c.id, {label: "③ Tải sheet có sẵn"})}${takesRow("sheet", c.id)}
     ${sheet ? chatPanel("sheet", c.id) : ""}</div>`;
 }
 function envCard(e) {
   const wide = pickOf("env_wide", e.id), rev = pickOf("env_rev", e.id);
   return `<div class="tile"><div class="head"><b>${esc(e.name)}</b>
-      <select data-act="env-tag" data-id="${e.id}"><option ${e.tag === "INT" ? "selected" : ""}>INT</option><option ${e.tag === "EXT" ? "selected" : ""}>EXT</option></select>
+      <select data-act="env-tag" data-id="${e.id}"><option ${e.tag === "INT" ? "selected" : ""}>INT (trong nhà)</option><option ${e.tag === "EXT" ? "selected" : ""}>EXT (ngoài trời)</option></select>
       <select data-act="env-time" data-id="${e.id}"><option value="day" ${e.time !== "night" ? "selected" : ""}>ngày</option><option value="night" ${e.time === "night" ? "selected" : ""}>đêm</option></select>
       ${approveBadge("envs", e)}</div>
+    <div class="stephead">① Mô tả bối cảnh (tiếng Anh — AI đọc mô tả này để vẽ ảnh)</div>
     <textarea data-act="env-text" data-id="${e.id}" rows="2" placeholder="mô tả bối cảnh (tiếng Anh)…" data-dirty-skip>${esc(e.text)}</textarea>
+    <div class="stephead">② Ảnh toàn cảnh (wide)</div>
     ${wide ? `<img class="media m169" src="${esc(src(wide))}">` : '<div class="ph">chưa có ảnh wide</div>'}
-    <div class="row">${itemBtn("env_wide", e.id, wide ? "Tạo lại" : "Tạo ảnh wide", !!wide)}</div>${uploadRow("env_wide", e.id)}${takesRow("env_wide", e.id)}
+    <div class="row">${itemBtn("env_wide", e.id, wide ? "② Tạo lại" : "② Tạo ảnh wide (tốn tiền)", !!wide)}</div>
+    <p class="hint">Đã có ảnh sẵn thì tải lên đây, không cần bấm Tạo:</p>
+    ${uploadRow("env_wide", e.id, {label: "② Tải ảnh có sẵn"})}${takesRow("env_wide", e.id)}
     ${wide ? chatPanel("env_wide", e.id) : ""}
+    <div class="stephead">③ Góc ngược (tuỳ chọn — không bắt buộc)</div>
     ${rev ? `<img class="media m169" src="${esc(src(rev))}">` : ""}
-    <div class="row">${itemBtn("env_rev", e.id, "Tạo góc ngược (tuỳ chọn)", !!rev)}</div>${uploadRow("env_rev", e.id)}${takesRow("env_rev", e.id)}
+    <div class="row">${itemBtn("env_rev", e.id, "③ Tạo góc ngược (tuỳ chọn, tốn tiền)", !!rev)}</div>${uploadRow("env_rev", e.id, {label: "③ Tải ảnh có sẵn"})}${takesRow("env_rev", e.id)}
     ${rev ? chatPanel("env_rev", e.id) : ""}</div>`;
 }
 function propCard(p) {
   const img = pickOf("prop", p.id);
   return `<div class="tile"><div class="head"><b>${esc(p.name)}</b>${approveBadge("props", p)}</div>
     ${img ? `<img class="media m11" src="${esc(src(img))}">` : '<div class="ph">chưa có ảnh</div>'}
-    <div class="row">${itemBtn("prop", p.id, img ? "Tạo lại" : "Tạo ảnh", !!img)}</div>${uploadRow("prop", p.id)}${takesRow("prop", p.id)}
+    <div class="row">${itemBtn("prop", p.id, img ? "Tạo lại" : "Tạo ảnh (tốn tiền)", !!img)}</div>
+    <p class="hint">Đã có ảnh sẵn thì tải lên đây, không cần bấm Tạo:</p>
+    ${uploadRow("prop", p.id, {label: "Tải ảnh có sẵn"})}${takesRow("prop", p.id)}
     ${img ? chatPanel("prop", p.id) : ""}</div>`;
 }
 function voiceCard(v) {
@@ -309,7 +326,13 @@ V.refs = {
     const chars = Object.values(S.chars), envs = Object.values(S.envs), props = Object.values(S.props),
           voices = Object.values(S.voices), refs = Object.values(S.video_refs);
     const pj = jobs("preprod"), pjl = pj[pj.length - 1];
-    return `<section class="card"><div class="row between"><h2>Danh sách tiền kỳ</h2>
+    return `<section class="card"><h2>Cách dùng tab này</h2>
+        <p class="hint">Làm theo thứ tự: <b>1)</b> bấm "Đề xuất danh sách (GPT)" hoặc tự bấm "+" để thêm nhân vật/bối cảnh/prop.
+        <b>2)</b> mục nào có chữ <span class="chip badge-unapproved" style="padding:0 6px">chưa duyệt</span> thì bấm "Duyệt" (chưa duyệt = chưa tốn tiền, chỉ là gợi ý của AI).
+        <b>3)</b> với nhân vật: tải ảnh thành phần → tạo ảnh nhân vật → tạo sheet 21:9 (mỗi bước có nút riêng, làm lần lượt từ trên xuống trong từng khung).
+        <b>4)</b> bấm "Tạo ảnh tham chiếu còn thiếu" để làm 1 lần cho mọi mục đã duyệt, thay vì bấm từng nút.
+        <b>5)</b> mỗi ảnh có khung "Chat sửa ảnh" riêng bên dưới — gõ yêu cầu sửa rồi bấm Gửi nếu ảnh chưa vừa ý.</p></section>
+      <section class="card"><div class="row between"><h2>Danh sách tiền kỳ</h2>
         <div class="row">${runBtn("preprod", "Đề xuất danh sách (GPT)")}<button class="primary" data-act="run" data-stage="refs_all">Tạo ảnh tham chiếu còn thiếu</button></div></div>
         <p class="hint">GPT đọc kịch bản + shot list, đề xuất nhân vật/bối cảnh/prop (chưa duyệt). Duyệt từng mục rồi bấm "Tạo ảnh tham chiếu còn thiếu" để chạy 1 lần cho tất cả.</p>
         ${pjl && ACTIVE.includes(pjl.status) ? '<div class="warnbox"><span class="spin"></span>Đang đề xuất…</div>' : ""}
