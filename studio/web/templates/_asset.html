@@ -1,0 +1,23 @@
+<form class="asset" hx-post="/kho/{{ table }}/{{ a.id }}" hx-swap="outerHTML"
+      style="border-top:1px solid var(--line); padding:14px 0; display:grid; grid-template-columns: 90px 1fr 160px; gap:12px">
+  <div>
+    <code>{{ a.code }}</code><br>
+    <span class="muted">{% set n = usage.get(a.code if table == 'character' else 'loc:' ~ a.id, 0) %}{{ n }} shot</span>
+    {% if a.version is defined %}<br><span class="muted">bản {{ a.version }}</span>{% endif %}
+  </div>
+  <div>
+    <input type="text" name="name" value="{{ a.name }}" style="font-weight:600; margin-bottom:6px">
+    <textarea name="canon_description" style="min-height:70px"
+      placeholder="{% if table == 'character' %}Mô tả chuẩn: tuổi, quốc tịch, dáng mặt, da, mắt, tóc, trang phục, khí chất (7 yếu tố){% else %}Mô tả chuẩn: trong/ngoài, giờ, hướng và màu ánh sáng, đồ vật chính, không khí{% endif %}">{{ a.canon_description }}</textarea>
+    {% if table == 'character' %}
+    <input type="text" name="rules" value="{{ a.rules }}" placeholder="Luật riêng, ví dụ: không bao giờ đeo nhẫn" style="margin-top:6px">
+    {% endif %}
+  </div>
+  <div>
+    <select name="status">
+      {% for k, v in ASSET_STATUS_VI.items() %}<option value="{{ k }}" {% if a.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+    <button type="submit" style="margin-top:8px; width:100%">Lưu</button>
+    {% if saved %}<div class="msg ok" style="margin-top:6px">Đã lưu</div>{% endif %}
+  </div>
+</form>

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Kho tài nguyên · Studio OS{% endblock %}
+{% block body %}
+{% include "_spend.html" %}
+<div class="panel">
+  <h2>Kho nhân vật &amp; bối cảnh</h2>
+  <p class="muted">Mỗi nhân vật / bối cảnh chỉ có <strong>một</strong> bản ghi, dùng chung cho cả 60 tập. Sửa ở đây là mọi shot dùng nó đều theo.
+     Bản mô tả cũng được lưu thành file chữ trong <code>{{ folder }}</code>.</p>
+</div>
+{% set titles = {'character': 'Nhân vật', 'location': 'Bối cảnh', 'prop': 'Đạo cụ'} %}
+{% for table in ['character', 'location', 'prop'] %}
+<div class="panel">
+  <h2>{{ titles[table] }} ({{ assets[table]|length }})</h2>
+  {% if assets[table] %}
+    {% for a in assets[table] %}{% include "_asset.html" %}{% endfor %}
+  {% else %}
+    <p class="muted">Chưa có. {% if table != 'prop' %}Sẽ tự thêm khi phân tích kịch bản.{% else %}Đạo cụ sẽ được tách ra ở bản phân tích bằng AI.{% endif %}</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

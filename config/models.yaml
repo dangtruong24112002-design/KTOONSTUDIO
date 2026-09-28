@@ -1,0 +1,76 @@
+# Routing, prices and caps. Business code never names a provider — it asks for a job type.
+# Prices in USD, verified 2026-09-27. Update after M0 with measured values.
+
+budgets:
+  per_episode: 40
+  per_month: 190
+  m0_test: 5
+
+providers:
+  wavespeed:
+    base_url: https://api.wavespeed.ai/api/v3
+    key_env: WAVESPEED_API_KEY
+    enabled: true
+  modelark:
+    base_url: https://ark.ap-southeast.bytepluses.com/api/v3
+    key_env: ARK_API_KEY
+    enabled: false   # turn on when an international card is available
+
+jobs:
+  character_sheet:
+    primary: {provider: wavespeed, model: bytedance/seedream-v5.0-pro, price_per_image: 0.045}
+    fallback: {provider: wavespeed, model: bytedance/seedream-v5.0-flash, price_per_image: 0.027}
+  keyframe:
+    primary: {provider: wavespeed, model: bytedance/seedream-v5.0-flash, price_per_image: 0.027}
+  motion_draft:
+    primary: {provider: wavespeed, model: wavespeed-ai/minimax-h3/image-to-video, price_per_run: 0.10}
+  final_video:
+    primary: {provider: wavespeed, model: bytedance/seedance-2.5/image-to-video,
+              price_per_second: {480p: 0.18, 720p: 0.36, 1080p: 0.90}}
+    cheaper_when_enabled: {provider: modelark, price_per_second: {480p: 0.1028, 720p: 0.2312}}
+    defaults: {resolution: 720p, duration: 5, generate_audio: true}
+  extend:
+    primary: {provider: wavespeed, model: bytedance/seedance-2.5/video-extend}
+  tts_en:
+    primary: {provider: wavespeed, model: bytedance/seed-speech-tts-2.0}
+  lipsync:
+    primary: {provider: wavespeed, model: bytedance/latentsync}
+    alternative: {provider: wavespeed, model: bytedance/seedance-2.5/talking-avatar, price_per_run: 1.10}
+  upscale:
+    primary: {provider: local, tool: realesrgan-ncnn-vulkan, target: 1080x1920}
+
+limits:
+  max_retakes_per_shot: 3
+  queue_concurrency: 4       # confirm in M0/T4
+  clip_seconds_default: 5
+  clip_seconds_max: 8        # longer only for deliberate one-take shots
+
+# LLM for the pipeline agents and the project assistant (docs/BRIEF.md 8.1).
+# Model IDs below are best guesses: confirm at setup with GET /v1/models on each provider, then a
+# one-token test call. Prices USD per million tokens, checked 2026-09-27 (Claude: platform.claude.com
+# pricing page; OpenAI: third-party listing, re-verify on openai.com before relying on it).
+llm:
+  providers:
+    anthropic:  {api: anthropic, key_env: ANTHROPIC_API_KEY}
+    openai:     {api: openai, base_url: https://api.openai.com/v1, key_env: OPENAI_API_KEY}
+    openrouter: {api: openai, base_url: https://openrouter.ai/api/v1, key_env: OPENROUTER_API_KEY}
+    gemini:     {api: openai, base_url: https://generativelanguage.googleapis.com/v1beta/openai/, key_env: GEMINI_API_KEY}
+  # a provider is available when its key is set; the panel's mode picker maps to these roles
+  roles:
+    assistant_quick:
+      anthropic: {model: claude-haiku-4-5, price_in: 1.00, price_out: 5.00}
+      openai:    {model: gpt-5.6-luna, price_in: 0.20, price_out: 1.20}
+    assistant_default:
+      anthropic: {model: claude-sonnet-5, price_in: 2.00, price_out: 10.00}
+      openai:    {model: gpt-5.6-luna, price_in: 0.20, price_out: 1.20}
+    assistant_deep:
+      anthropic: {model: claude-opus-5-5, price_in: 4.00, price_out: 20.00}
+      openai:    {model: gpt-5.6-sol, price_in: 4.00, price_out: 20.00}
+    script_analysis:
+      anthropic: {model: claude-sonnet-5, price_in: 2.00, price_out: 10.00}
+  caps:
+    assistant_per_day: 1.50
+    assistant_per_month: 15      # inside budgets.per_month
+  limits:
+    max_tool_rounds: 6
+    history_turns: 12

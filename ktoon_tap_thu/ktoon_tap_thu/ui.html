@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KTOON · Chạy thử 1 tập</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--card2:#1d212a;--line:#2a2f3a;--text:#e8e9ec;--muted:#9aa1ad;--accent:#ff7a45;--accent2:#ffb088;--ok:#3ecf8e;--warn:#f5b942;--err:#ff6b6b;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:#3a4150}
+button.primary{background:var(--accent);border-color:var(--accent);color:#1a0d06;font-weight:600}
+button.primary:hover{background:var(--accent2)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.link{background:none;border:none;color:var(--accent2);padding:0;text-decoration:underline}
+input,select,textarea{background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:6px 9px;width:100%}
+textarea{resize:vertical;line-height:1.45}
+a{color:var(--accent2)}
+.top{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.96);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center}
+.brand{font-weight:800;letter-spacing:.04em;font-size:16px}.brand span{font-weight:400;color:var(--muted);letter-spacing:0}
+.meters{display:flex;flex-wrap:wrap;gap:8px 22px;margin-left:auto}
+.meter .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.meter .val{font-weight:700;font-variant-numeric:tabular-nums}.meter small{font-weight:400;color:var(--muted)}
+.meter .sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:3px;width:150px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.bar.hot i{background:var(--err)}
+nav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line)}
+nav button{border-radius:999px;padding:5px 12px}
+nav button.on{background:var(--text);color:#111;border-color:var(--text);font-weight:600}
+nav button .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--line);margin-right:6px;vertical-align:1px}
+nav button .dot.ok{background:var(--ok)}nav button .dot.part{background:var(--warn)}nav button .dot.run{background:var(--accent);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.3}}
+main{padding:16px;max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+h2{font-size:17px;margin:0}h3{font-size:15px;margin:0}
+.hint,.muted{color:var(--muted);font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.between{justify-content:space-between}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;font-variant-numeric:tabular-nums}
+.chip.a{border-color:#7a3b22;color:#ffb088}.chip.b{border-color:#2d4a6b;color:#9cc7ff}.chip.c{border-color:#2f5a44;color:#8fe0b5}
+.status{font-size:12px;border-radius:6px;padding:2px 8px;display:inline-block}
+.st-running,.st-starting,.st-queued{background:#3a2a17;color:var(--warn)}.st-done{background:#15321f;color:var(--ok)}
+.st-failed,.st-stalled{background:#3a1717;color:var(--err)}.st-cancelled{background:var(--card2);color:var(--muted)}
+.err{color:var(--err);font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+.warnbox{border:1px solid #5a4516;background:#2a2112;color:#f3d38b;border-radius:10px;padding:8px 12px;font-size:13px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.grid.cast{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.tile .head{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.tile .head b{font-size:14px}
+.media{width:100%;aspect-ratio:9/16;background:#000;border-radius:8px;object-fit:cover;display:block}
+.ph{width:100%;aspect-ratio:9/16;border-radius:8px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:12.5px;padding:10px}
+.takes{display:flex;flex-wrap:wrap;gap:4px}
+.take{padding:2px 8px;font-size:12px;border-radius:6px}
+.take.on{border-color:var(--accent);color:var(--accent2)}
+.take.fail{color:var(--err)}.take.run{color:var(--warn)}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+details pre{white-space:pre-wrap;word-break:break-word;background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;max-height:260px;overflow:auto;margin:6px 0 0}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right}
+.tablewrap{overflow-x:auto}
+.shotrow{border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;grid-template-columns:70px 90px 80px 1fr;align-items:start;background:var(--card2)}
+.shotrow .full{grid-column:1/-1}
+.shotrow label{font-size:11px;color:var(--muted);display:block}
+.big{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.kpi{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.watch{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:16px;align-items:start}
+.clips{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.clips li.now{color:var(--accent2);font-weight:600}
+.dirty{position:sticky;top:64px;z-index:4}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:560px;width:100%;display:flex;flex-direction:column;gap:10px;max-height:85vh;overflow:auto}
+.modal ul{margin:0;padding-left:18px;max-height:260px;overflow:auto;font-size:13px}
+.toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;z-index:30;max-width:420px}
+.toast div{background:#23272f;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px}
+.toast div.bad{border-color:#6b2b2b;background:#2c1a1a}
+.offline{background:#3a1717;color:#ffd0d0;padding:8px 16px;font-size:13px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--warn);border-right-color:transparent;border-radius:50%;animation:rot .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes rot{to{transform:rotate(360deg)}}
+@media (max-width:760px){.watch{grid-template-columns:1fr}.shotrow{grid-template-columns:1fr 1fr}.meters{margin-left:0}.dirty{top:0}}
+</style>
+</head>
+<body>
+<div id="offline" class="offline" hidden>Mất kết nối với app. Cửa sổ đen (app) còn mở không? Mở lại app rồi tải lại trang này.</div>
+<header class="top">
+  <div class="brand">KTOON <span>· chạy thử 1 tập</span></div>
+  <div class="meters" id="meters"></div>
+</header>
+<nav id="nav"></nav>
+<main id="view"><div class="card">Đang tải…</div></main>
+<div id="modal" class="modal" hidden><div class="box"><h3 id="mTitle"></h3><div id="mBody"></div>
+  <div class="row" style="justify-content:flex-end"><button id="mCancel">Huỷ</button><button id="mOk" class="primary">Chạy</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const TOKEN = "__KTOON_TOKEN__";
+const TABS = [["script","1 · Kịch bản"],["plan","2 · Shot list"],["cast","3 · Nhân vật"],["kf","4 · Keyframe"],["vid","5 · Video"],["voice","6 · Lồng tiếng"],["watch","7 · Xem tập"],["cost","Chi phí"],["settings","Cài đặt"]];
+let S = null, tab = "script", lastSig = "", dirty = {}, fatal = false;
+try { tab = localStorage.getItem("ktoon_tab") || "script"; } catch (e) {}
+if (!TABS.some(t => t[0] === tab)) tab = "script";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const usd = (x, d) => "$" + (Number(x) || 0).toFixed(d == null ? ((Number(x) || 0) < 1 ? 3 : 2) : d);
+const vnd = x => Math.round((Number(x) || 0) * S.vnd).toLocaleString("vi-VN") + " đ";
+const trieu = x => ((Number(x) || 0) * S.vnd / 1e6).toLocaleString("vi-VN", {maximumFractionDigits: 1}) + " triệu";
+const ACTIVE = ["queued", "starting", "running"];
+const ST_VI = {queued:"chờ", starting:"bắt đầu", running:"đang chạy", done:"xong", failed:"lỗi", stalled:"quá giờ", cancelled:"đã huỷ"};
+
+async function api(path, body) {
+  const opt = {headers: {"X-Ktoon-Token": TOKEN}};
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (r.status === 403) { fatal = true; $("#offline").hidden = false; $("#offline").textContent = "Phiên cũ đã hết hiệu lực (app vừa mở lại). Tải lại trang này (F5)."; throw new Error("token"); }
+  return r.json();
+}
+function toast(msg, bad) {
+  const d = document.createElement("div"); d.textContent = msg; if (bad) d.className = "bad";
+  $("#toast").appendChild(d); setTimeout(() => d.remove(), bad ? 9000 : 4000);
+}
+function ask(title, html, okLabel) {
+  return new Promise(res => {
+    $("#mTitle").textContent = title; $("#mBody").innerHTML = html; $("#mOk").textContent = okLabel || "Chạy";
+    $("#modal").hidden = false;
+    const done = v => { $("#modal").hidden = true; $("#mOk").onclick = $("#mCancel").onclick = null; res(v); };
+    $("#mOk").onclick = () => done(true); $("#mCancel").onclick = () => done(false);
+  });
+}
+
+// ---------- data helpers
+const jobs = (kind, target) => S.jobs.filter(j => j.kind === kind && (target == null || j.target === target));
+const jobById = id => S.jobs.find(j => j.id === id);
+const pickOf = (kind, target) => jobById(S.picks[kind + ":" + target]);
+const src = j => j ? (j.file ? "/files/" + j.file.split("/").map(encodeURIComponent).join("/") : j.url) : "";
+const active = () => S.jobs.some(j => ACTIVE.includes(j.status));
+const chars = () => (S.plan ? S.plan.characters : []);
+const shots = () => (S.plan ? S.plan.shots : []);
+const charName = id => (chars().find(c => c.id === id) || {name: id}).name;
+const tierPrice = t => Number(S.settings["price_" + t]);
+const modelLabel = m => (S.presets[m] ? S.presets[m][0] : String(m).split("/").pop());
+function statusTag(j) {
+  if (!j) return "";
+  const spin = ACTIVE.includes(j.status) ? '<span class="spin"></span>' : "";
+  return `<span class="status st-${j.status}">${spin}${ST_VI[j.status] || j.status}</span>`;
+}
+function takesRow(kind, target) {
+  const ts = jobs(kind, target); const p = pickOf(kind, target);
+  if (!ts.length) return "";
+  return '<div class="takes">' + ts.map(j => {
+    const cls = j.status === "done" ? (p && p.id === j.id ? "on" : "") : (j.status === "failed" || j.status === "stalled" ? "fail" : (ACTIVE.includes(j.status) ? "run" : ""));
+    const tip = j.status === "done" ? "Chọn bản này" : (ST_VI[j.status] || j.status) + (j.error ? ": " + j.error : "");
+    return `<button class="take ${cls}" data-act="pick" data-job="${esc(j.id)}" title="${esc(tip)}">t${j.take}${j.status === "done" ? "" : " · " + (ST_VI[j.status] || j.status)}</button>`;
+  }).join("") + "</div>";
+}
+function lastErr(kind, target) {
+  const ts = jobs(kind, target); const j = ts[ts.length - 1];
+  if (!j) return "";
+  let h = "";
+  if (j.status === "failed" || j.status === "stalled") h += `<div class="err">${esc(j.error || "Lỗi")}</div>`;
+  if (j.status === "stalled") h += `<button data-act="recheck" data-job="${esc(j.id)}">Hỏi lại</button>`;
+  return h;
+}
+function runBtn(stage, label, opts) {
+  opts = opts || {};
+  const t = S.todo[stage] || {n: 0, est: 0};
+  const target = opts.target ? ` data-target="${esc(opts.target)}"` : "";
+  const redo = opts.redo ? ' data-redo="1"' : "";
+  const cost = opts.cost != null ? opts.cost : t.est;
+  const n = opts.target ? "" : (t.n ? ` · ${t.n} việc` : "");
+  const none = !opts.target && !t.n;
+  const dis = opts.disabled || none ? " disabled" : "";
+  return `<button class="${opts.plain ? "" : "primary"}" data-act="run" data-stage="${stage}"${target}${redo}${dis}>${esc(label)}${none ? " · đã đủ" : n + " · ~" + usd(cost)}</button>`;
+}
+
+// ---------- header + nav
+function renderHeader() {
+  const m = S.money, b = S.budget, pct = Math.min(100, (m.spent + m.reserved) / b * 100);
+  let real = 0, have = false, subs = [];
+  for (const [p, name] of [["wavespeed", "WaveSpeed"], ["atlas", "Atlas"]]) {
+    const x = S.balance[p];
+    if (x && x.now != null) { subs.push(`${name} ${usd(x.now, 2)}`); if (x.start != null) { real += x.start - x.now; have = true; } }
+    else subs.push(`${name} ${S.keys[p] ? "?" : "chưa có key"}`);
+  }
+  const runN = S.jobs.filter(j => ACTIVE.includes(j.status)).length;
+  $("#meters").innerHTML =
+    `<div class="meter"><div class="lbl">Đã chi (ước tính)</div><div class="val">${usd(m.spent, 2)} <small>/ trần ${usd(b, 2)}</small></div><div class="bar ${pct > 85 ? "hot" : ""}"><i style="width:${pct}%"></i></div></div>` +
+    `<div class="meter"><div class="lbl">Thực chi theo số dư</div><div class="val">${have ? usd(real, 2) : "—"}</div><div class="sub">${subs.join(" · ")}</div></div>` +
+    `<div class="meter"><div class="lbl">Đang chạy</div><div class="val">${runN ? '<span class="spin"></span>' : ""}${runN} việc</div><div class="sub">${m.reserved ? "chờ chi ~" + usd(m.reserved) : "&nbsp;"}</div></div>`;
+}
+function tabState(id) {
+  const any = kinds => S.jobs.some(j => kinds.includes(j.kind) && ACTIVE.includes(j.status));
+  const all = (kind, list) => list.length && list.every(x => S.picks[kind + ":" + x]);
+  switch (id) {
+    case "script": return any(["script"]) ? "run" : (S.script.trim() ? "ok" : "");
+    case "plan": return any(["plan"]) ? "run" : (S.plan ? "ok" : "");
+    case "cast": return any(["char"]) ? "run" : (all("char", chars().map(c => c.id)) ? "ok" : (jobs("char").length ? "part" : ""));
+    case "kf": return any(["kf"]) ? "run" : (all("kf", shots().map(s => s.id)) ? "ok" : (jobs("kf").length ? "part" : ""));
+    case "vid": return any(["vid"]) ? "run" : (all("vid", shots().map(s => s.id)) ? "ok" : (jobs("vid").length ? "part" : ""));
+    case "voice": {
+      if (S.settings.voice_mode === "native") return S.plan ? "ok" : "";
+      const d = shots().filter(s => s.line).map(s => s.id);
+      return any(["tts", "lip"]) ? "run" : (d.length && all("lip", d) ? "ok" : (jobs("lip").length || jobs("tts").length ? "part" : ""));
+    }
+    case "watch": return S.final.length && S.final.every(c => c.src) ? "ok" : (S.final.some(c => c.src) ? "part" : "");
+  }
+  return "";
+}
+function renderNav() {
+  $("#nav").innerHTML = TABS.map(([id, label]) => {
+    const st = tabState(id);
+    return `<button data-tab="${id}" class="${tab === id ? "on" : ""}">${st ? `<span class="dot ${st}"></span>` : ""}${esc(label)}</button>`;
+  }).join("");
+}
+
+// ---------- views
+const V = {};
+V.script = {
+  sig: () => [S.premise, S.script, jobs("script").map(j => j.id + j.status + j.cost), S.todo.script, S.keys],
+  html() {
+    const js = jobs("script"), last = js[js.length - 1];
+    let status = "";
+    if (last && ACTIVE.includes(last.status)) status = `<div class="warnbox"><span class="spin"></span>GPT đang viết kịch bản (thường 20–120 giây)…</div>`;
+    else if (last && last.status === "failed") status = `<div class="err">${esc(last.error)}</div>`;
+    const words = S.script.trim() ? S.script.trim().split(/\s+/).length : 0;
+    return `<section class="card">
+      <h2>Ý tưởng tập</h2>
+      <p class="hint">Viết tiếng Việt cũng được. GPT viết kịch bản tiếng Anh (thoại Mỹ), kèm tóm tắt tiếng Việt ở đầu.</p>
+      <textarea id="premise" rows="11" data-dirty>${esc(S.premise)}</textarea>
+      <div class="row"><button data-act="save-premise">Lưu ý tưởng</button>${runBtn("script", "Viết kịch bản bằng GPT")}<span class="muted">${esc(S.settings.script_model)}</span></div>
+      ${S.todo.script.error ? `<div class="muted">${esc(S.todo.script.error)}</div>` : ""}${status}
+    </section>
+    <section class="card">
+      <div class="row between"><h2>Kịch bản</h2><span class="muted">${words} chữ</span></div>
+      <p class="hint">Có kịch bản sẵn thì dán vào đây rồi bấm Lưu, không cần gọi GPT.</p>
+      <textarea id="script" rows="24" data-dirty>${esc(S.script)}</textarea>
+      <div class="row"><button class="primary" data-act="save-script">Lưu kịch bản</button><button data-tab="plan">Sang bước 2 →</button></div>
+      ${js.length ? `<details><summary>Các bản GPT đã viết (${js.length})</summary><div class="tablewrap"><table><tr><th>Bản</th><th>Lúc</th><th>Trạng thái</th><th class="num">Token vào/ra</th><th class="num">Chi</th><th></th></tr>${js.map(j => `<tr><td>t${j.take}</td><td>${esc(j.created)}</td><td>${statusTag(j)}</td><td class="num">${j.tokens ? j.tokens.in + " / " + j.tokens.out : ""}</td><td class="num">${usd(j.cost, 4)}</td><td>${j.result ? `<button data-act="use-result" data-job="${esc(j.id)}">Dùng bản này</button>` : ""}</td></tr>`).join("")}</table></div></details>` : ""}
+    </section>`;
+  }
+};
+
+V.plan = {
+  sig: () => [S.plan_v, S.plan, jobs("plan").map(j => j.id + j.status + j.cost), S.todo.plan, S.settings],
+  html() {
+    const js = jobs("plan"), last = js[js.length - 1];
+    let status = "";
+    if (last && ACTIVE.includes(last.status)) status = `<div class="warnbox"><span class="spin"></span>Gemini đang làm shot list…</div>`;
+    else if (last && last.status === "failed") status = `<div class="err">${esc(last.error)}</div>`;
+    let head = `<section class="card"><div class="row between"><h2>Shot list</h2>${runBtn("plan", S.plan ? "Tạo lại shot list bằng Gemini" : "Tạo shot list bằng Gemini")}</div>
+      <p class="hint">Gemini chia kịch bản thành 16–20 shot, xếp hạng A (hook/twist/cliffhanger), B (diễn, thoại), C (cảnh đơn giản). Sửa tay được ở dưới rồi bấm Lưu.${S.plan ? " Tạo lại shot list thì ảnh và video đã làm sẽ không dùng nữa." : ""}</p>
+      ${S.todo.plan.error ? `<div class="muted">${esc(S.todo.plan.error)}</div>` : ""}${status}`;
+    if (!S.plan) return head + "</section>";
+    const sec = {A: 0, B: 0, C: 0}; let lines = 0;
+    shots().forEach(s => { sec[s.tier] += s.duration; if (s.line) lines++; });
+    const tot = sec.A + sec.B + sec.C;
+    const once = ["A", "B", "C"].reduce((a, t) => a + sec[t] * tierPrice(t), 0);
+    const planned = sec.A * tierPrice("A") * 2 + sec.B * tierPrice("B") * 1.6 + sec.C * tierPrice("C") * 1.3;
+    head += `<div class="chips"><span class="chip">${shots().length} shot · ${tot} giây</span><span class="chip a">A ${sec.A}s</span><span class="chip b">B ${sec.B}s</span><span class="chip c">C ${sec.C}s</span><span class="chip">${lines} câu thoại</span></div>
+      <div class="muted">Video tạo 1 lần: ~${usd(once, 2)} · tính cả làm lại như kế hoạch (A×2, B×1.6, C×1.3): ~${usd(planned, 2)}. Mục tiêu kế hoạch: A 15s, B 50s, C 25s.</div></section>`;
+    const voiceOpts = v => S.voices.map(x => `<option ${x === v ? "selected" : ""}>${x}</option>`).join("");
+    const cs = `<section class="card"><h3>Nhân vật</h3><div class="tablewrap"><table><tr><th>Tên</th><th>Giọng (TTS)</th><th>Mô tả ngoại hình (prompt ảnh nhân vật)</th></tr>` +
+      chars().map(c => `<tr data-char="${esc(c.id)}"><td style="width:170px"><input data-dirty data-f="name" value="${esc(c.name)}"><div class="muted">id: ${esc(c.id)}</div></td><td style="width:170px"><select data-dirty data-f="voice">${voiceOpts(c.voice)}</select></td><td><textarea data-dirty data-f="look" rows="3">${esc(c.look)}</textarea></td></tr>`).join("") + `</table></div></section>`;
+    const ls = `<section class="card"><h3>Bối cảnh</h3>` + S.plan.locations.map(l => `<div data-loc="${esc(l.id)}"><label class="muted">${esc(l.id)} · ${esc(l.name)}</label><textarea data-dirty data-f="block" rows="2">${esc(l.block)}</textarea></div>`).join("") + `</section>`;
+    const speakerOpts = sp => `<option value="">— không thoại —</option>` + chars().map(c => `<option value="${esc(c.id)}" ${c.id === sp ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+    const locOpts = lid => S.plan.locations.map(l => `<option value="${esc(l.id)}" ${l.id === lid ? "selected" : ""}>${esc(l.id)} · ${esc(l.name)}</option>`).join("");
+    const ss = `<section class="card"><h3>Shot</h3>` + shots().map(s => `<div class="shotrow" data-shot="${esc(s.id)}">
+        <div><label>Shot</label><b>${esc(s.id)}</b></div>
+        <div><label>Hạng</label><select data-dirty data-f="tier">${["A", "B", "C"].map(t => `<option ${t === s.tier ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+        <div><label>Giây (4–15)</label><input data-dirty data-f="duration" type="number" min="4" max="15" value="${s.duration}"></div>
+        <div><label>Ghi chú</label><input data-dirty data-f="note_vi" value="${esc(s.note_vi)}"></div>
+        <div class="full row" style="gap:8px;align-items:flex-start">
+          <div style="flex:1 1 160px"><label>Nhân vật trong hình (id, cách nhau dấu phẩy)</label><input data-dirty data-f="cast" value="${esc(s.cast.join(", "))}"></div>
+          <div style="flex:1 1 160px"><label>Bối cảnh</label><select data-dirty data-f="location">${locOpts(s.location)}</select></div>
+          <div style="flex:1 1 160px"><label>Người nói</label><select data-dirty data-f="speaker">${speakerOpts(s.speaker)}</select></div>
+          <div style="flex:3 1 280px"><label>Câu thoại (tiếng Anh)</label><input data-dirty data-f="line" value="${esc(s.line)}"></div>
+        </div>
+        <details class="full"><summary>Prompt keyframe và video</summary>
+          <label>Keyframe</label><textarea data-dirty data-f="keyframe_prompt" rows="4">${esc(s.keyframe_prompt)}</textarea>
+          <label>Video</label><textarea data-dirty data-f="video_prompt" rows="4">${esc(s.video_prompt)}</textarea>
+        </details></div>`).join("") + `</section>`;
+    const save = `<div class="row"><button class="primary" data-act="save-plan">Lưu shot list</button><button data-tab="cast">Sang bước 3 →</button></div>`;
+    return head + cs + ls + ss + save;
+  }
+};
+
+function gridView(kind, stage, opts) {
+  const list = opts.items();
+  const cards = list.map(it => {
+    const p = pickOf(kind, it.id), ts = jobs(kind, it.id), last = ts[ts.length - 1];
+    let media;
+    const poster = opts.video ? src(pickOf("kf", it.id)) : "";
+    if (p) media = opts.video ? `<video class="media" src="${esc(src(p))}" ${poster ? `poster="${esc(poster)}"` : ""} controls playsinline preload="metadata"></video>` : `<a href="${esc(src(p))}" target="_blank" rel="noopener"><img class="media" src="${esc(src(p))}" alt=""></a>`;
+    else media = `<div class="ph">${last && ACTIVE.includes(last.status) ? '<span><span class="spin"></span>đang tạo…</span>' : (opts.blocked && opts.blocked(it) || "chưa có")}</div>`;
+    const redoCost = opts.cost(it);
+    const liveN = ts.filter(j => !["failed", "cancelled"].includes(j.status)).length;
+    const maxN = opts.max || 5;
+    const canRedo = !(last && ACTIVE.includes(last.status)) && liveN < maxN && !(opts.blocked && opts.blocked(it));
+    const prompt = p && p.prompt ? `<details><summary>Prompt đã gửi</summary><pre>${esc(p.prompt)}</pre></details>` : "";
+    return `<div class="tile"><div class="head"><b>${esc(it.title)}</b><span class="muted">${it.sub || ""}</span></div>
+      ${it.note ? `<div class="muted">${esc(it.note)}</div>` : ""}${media}
+      ${opts.extra ? opts.extra(it, p) : ""}${takesRow(kind, it.id)}${lastErr(kind, it.id)}
+      <div class="row">${runBtn(stage, liveN ? "Tạo lại" : "Tạo", {target: it.id, redo: liveN > 0, cost: redoCost, plain: true, disabled: !canRedo})}${liveN >= maxN ? `<span class="muted">đã ${maxN} lần</span>` : ""}</div>${prompt}</div>`;
+  }).join("");
+  return `<div class="grid ${opts.cls || ""}">${cards}</div>`;
+}
+
+V.cast = {
+  sig: () => [S.plan_v, chars(), jobs("char").map(j => j.id + j.status + j.file), S.picks, S.todo.char],
+  html() {
+    if (!S.plan) return `<section class="card"><h2>Ảnh nhân vật</h2><p class="muted">Làm shot list (bước 2) trước.</p></section>`;
+    return `<section class="card"><div class="row between"><h2>Ảnh nhân vật</h2>${runBtn("char", "Tạo ảnh còn thiếu")}</div>
+      <p class="hint">Duyệt mặt nhân vật trước. Bản được chọn (viền cam) là ảnh tham chiếu cho mọi keyframe. Seedream 5.0 Flash, ${usd(S.settings.image_price)}/ảnh.</p>
+      ${S.todo.char.error ? `<div class="muted">${esc(S.todo.char.error)}</div>` : ""}</section>` +
+      gridView("char", "char", {cls: "cast", items: () => chars().map(c => ({id: c.id, title: c.name, sub: esc(c.voice), note: ""})),
+        cost: () => Number(S.settings.image_price), max: 5,
+        extra: (it) => `<details><summary>Mô tả ngoại hình</summary><pre>${esc((chars().find(c => c.id === it.id) || {}).look)}</pre></details>`});
+  }
+};
+
+V.kf = {
+  sig: () => [S.plan_v, shots(), jobs("kf").map(j => j.id + j.status + j.file), jobs("char").map(j => j.id + j.status), S.picks, S.todo.kf],
+  html() {
+    if (!S.plan) return `<section class="card"><h2>Keyframe</h2><p class="muted">Làm shot list (bước 2) trước.</p></section>`;
+    const missingCast = chars().filter(c => !S.picks["char:" + c.id]);
+    return `<section class="card"><div class="row between"><h2>Keyframe</h2>${runBtn("kf", "Tạo keyframe còn thiếu")}</div>
+      <p class="hint">Mỗi shot một ảnh 9:16, dùng ảnh nhân vật đã chọn làm tham chiếu. Duyệt keyframe trước khi làm video (video đắt hơn ảnh nhiều lần).</p>
+      ${missingCast.length ? `<div class="warnbox">Chưa có ảnh nhân vật: ${esc(missingCast.map(c => c.name).join(", "))}. Làm bước 3 trước.</div>` : ""}
+      ${S.todo.kf.error && !missingCast.length ? `<div class="muted">${esc(S.todo.kf.error)}</div>` : ""}</section>` +
+      gridView("kf", "kf", {items: () => shots().map(s => ({id: s.id, title: s.id, sub: `<span class="chip ${s.tier.toLowerCase()}">${s.tier}</span> ${s.duration}s`, note: s.note_vi})),
+        cost: () => Number(S.settings.image_price), max: 5,
+        blocked: it => { const s = shots().find(x => x.id === it.id); const miss = s.cast.filter(c => !S.picks["char:" + c]); return miss.length ? "Thiếu ảnh nhân vật: " + miss.map(charName).join(", ") : ""; },
+        extra: (it, p) => { const s = shots().find(x => x.id === it.id); let w = ""; if (p && p.inputs && p.inputs.char && s.cast.some((c, i) => S.picks["char:" + c] !== p.inputs.char[i])) w = `<div class="err">⚠ Ảnh nhân vật đã đổi sau khi làm keyframe này.</div>`; return `<div class="muted">${s.cast.length ? esc(s.cast.map(charName).join(", ")) : "không có nhân vật"}${s.line ? " · 🗨 " + esc(charName(s.speaker)) : ""}</div>` + w; }});
+  }
+};
+
+V.vid = {
+  sig: () => [S.plan_v, shots(), jobs("vid").map(j => j.id + j.status + j.file + JSON.stringify(j.measured || "")), jobs("kf").map(j => j.id + j.status), S.picks, S.todo.vid, S.todo.probe, S.settings],
+  html() {
+    if (!S.plan) return `<section class="card"><h2>Video</h2><p class="muted">Làm shot list (bước 2) trước.</p></section>`;
+    const st = S.settings;
+    const tiers = ["A", "B", "C"].map(t => `<span class="chip ${t.toLowerCase()}">${t}: ${esc(modelLabel(st["video_" + t]))} · ${usd(st["price_" + t], 4)}/s</span>`).join("");
+    const measured = S.jobs.filter(j => j.kind === "vid" && j.measured);
+    const mt = measured.length ? `<div class="tablewrap"><table><tr><th>Model</th><th class="num">Giây</th><th class="num">Niêm yết /s</th><th class="num">Đo được /s</th><th class="num">Số dư giảm</th></tr>${measured.map(j => `<tr><td>${esc(modelLabel(j.model))} (${esc(j.target)})</td><td class="num">${j.units}</td><td class="num">${usd(j.unit_price, 4)}</td><td class="num">${j.measured.per_unit != null ? usd(j.measured.per_unit, 4) : "—"}</td><td class="num">${j.measured.charge != null ? usd(j.measured.charge, 4) : "không đọc được số dư"}</td></tr>`).join("")}</table></div>` : "";
+    const queued = S.jobs.filter(j => j.status === "queued").length;
+    return `<section class="card"><div class="row between"><h2>Video</h2>${runBtn("vid", "Tạo video còn thiếu")}</div>
+      <div class="chips">${tiers}<span class="chip">${esc(st.video_resolution)} · 9:16 · có âm thanh</span></div>
+      <div class="warnbox"><b>Nên đo giá thật trước.</b> Atlas chỉ ghi một giá cho Seedance 2.5, chưa rõ 720p có đắt hơn không. Nút dưới chạy lần lượt 1 shot mỗi hạng và đọc số dư Atlas trước/sau. Các video này dùng luôn trong tập.
+        <div class="row" style="margin-top:8px">${runBtn("probe", "Đo giá thật")}</div>${S.todo.probe.error ? `<div class="muted">${esc(S.todo.probe.error)}</div>` : ""}</div>
+      ${mt}
+      ${S.todo.vid.error ? `<div class="muted">${esc(S.todo.vid.error)}</div>` : ""}
+      ${queued ? `<div class="row"><span class="muted">${queued} việc đang chờ gửi</span><button data-act="cancel">Huỷ các việc đang chờ</button></div>` : ""}</section>` +
+      gridView("vid", "vid", {video: true, max: Number(st.max_takes) || 3,
+        items: () => shots().map(s => ({id: s.id, title: s.id, sub: `<span class="chip ${s.tier.toLowerCase()}">${s.tier}</span> ${s.duration}s`, note: s.note_vi})),
+        cost: it => { const s = shots().find(x => x.id === it.id); return s.duration * tierPrice(s.tier); },
+        blocked: it => S.picks["kf:" + it.id] ? "" : "Chưa có keyframe",
+        extra: (it, p) => { const s = shots().find(x => x.id === it.id); let w = `<div class="muted">${esc(modelLabel(st["video_" + s.tier]))}${s.line ? " · 🗨 " + esc(charName(s.speaker)) + ': "' + esc(s.line) + '"' : ""}</div>`; if (p && p.inputs && p.inputs.kf && p.inputs.kf !== S.picks["kf:" + s.id]) w += `<div class="err">⚠ Keyframe đã đổi sau khi làm video này.</div>`; if (p && p.measured && p.measured.per_unit != null) w += `<div class="muted">Đo giá: ${usd(p.measured.per_unit, 4)}/s</div>`; return w; }});
+  }
+};
+
+V.voice = {
+  sig: () => [S.plan_v, shots(), ["tts", "lip", "vid"].map(k => jobs(k).map(j => j.id + j.status + j.file)), S.picks, S.todo.voice, S.settings.voice_mode],
+  html() {
+    if (!S.plan) return `<section class="card"><h2>Lồng tiếng</h2><p class="muted">Làm shot list (bước 2) trước.</p></section>`;
+    if (S.settings.voice_mode === "native") return `<section class="card"><h2>Lồng tiếng</h2><p>Đang dùng chế độ <b>Seedance tự nói</b>: câu thoại nằm sẵn trong video ở bước 5, không cần bước này.</p><p class="hint">Muốn giọng cố định cho từng nhân vật thì đổi ở Cài đặt → Lồng tiếng.</p><div><button data-tab="settings">Mở Cài đặt</button></div></section>`;
+    const ds = shots().filter(s => s.line);
+    const rows = ds.map(s => {
+      const c = chars().find(x => x.id === s.speaker) || {name: s.speaker, voice: ""};
+      const t = pickOf("tts", s.id), l = pickOf("lip", s.id), v = pickOf("vid", s.id);
+      const tl = jobs("tts", s.id), ll = jobs("lip", s.id);
+      const runningHere = [...tl, ...ll].some(j => ACTIVE.includes(j.status));
+      const secs = Math.max(Number(S.settings.lipsync_min_s), Math.ceil(s.duration));
+      const ttsCost = s.line.length * Number(S.settings.tts_price_per_1k_chars) / 1000;
+      const lipCost = secs * Number(S.settings.lipsync_price_per_s);
+      const maxN = Number(S.settings.max_takes) || 3;
+      const canTts = !runningHere && v && tl.filter(j => !["failed", "cancelled"].includes(j.status)).length < maxN;
+      const canLip = !runningHere && v && t && ll.filter(j => !["failed", "cancelled"].includes(j.status)).length < maxN;
+      return `<div class="tile"><div class="head"><b>${esc(s.id)} · ${esc(c.name)}</b><span class="muted">${esc(c.voice)}</span></div>
+        <div>"${esc(s.line)}"</div>
+        ${t ? `<audio src="${esc(src(t))}" controls preload="none" style="width:100%"></audio>` : `<div class="muted">${tl.length && ACTIVE.includes(tl[tl.length - 1].status) ? '<span class="spin"></span>đang tạo giọng…' : "chưa có giọng"}</div>`}
+        ${takesRow("tts", s.id)}${lastErr("tts", s.id)}
+        ${l ? `<video class="media" src="${esc(src(l))}" controls playsinline preload="metadata"></video>` : `<div class="ph">${ll.length && ACTIVE.includes(ll[ll.length - 1].status) ? '<span><span class="spin"></span>đang ghép khẩu hình… (1–3 phút)</span>' : (v ? "chưa có khẩu hình" : "chưa có video (bước 5)")}</div>`}
+        ${takesRow("lip", s.id)}${lastErr("lip", s.id)}
+        <div class="row">${runBtn("tts", "Tạo lại giọng", {target: s.id, redo: true, cost: ttsCost + lipCost, plain: true, disabled: !canTts || !tl.length})}${runBtn("lip", "Tạo lại khẩu hình", {target: s.id, redo: true, cost: lipCost, plain: true, disabled: !canLip || !ll.length})}</div></div>`;
+    }).join("");
+    return `<section class="card"><div class="row between"><h2>Lồng tiếng + khẩu hình</h2>${runBtn("voice", "Tạo giọng + khẩu hình còn thiếu")}</div>
+      <p class="hint">Mỗi nhân vật một giọng cố định (${esc(S.settings.tts_model)}, đổi giọng ở bước 2). Khẩu hình: ${esc(S.settings.lipsync_model)}. ${ds.length} shot có thoại.</p>
+      ${S.todo.voice.error ? `<div class="muted">${esc(S.todo.voice.error)}</div>` : ""}</section>
+      <div class="grid">${rows || '<p class="muted">Không có shot nào có thoại.</p>'}</div>`;
+  }
+};
+
+let PL = {i: -1};
+V.watch = {
+  sig: () => [S.final, S.export, S.ffmpeg],
+  html() {
+    if (!S.plan) return `<section class="card"><h2>Xem tập</h2><p class="muted">Chưa có shot list.</p></section>`;
+    const have = S.final.filter(c => c.src), secs = S.final.reduce((a, c) => a + (c.src ? c.duration : 0), 0);
+    const ex = S.export || {};
+    let exp = "";
+    if (S.ffmpeg) exp = `<div class="row"><button data-act="export" ${have.length ? "" : "disabled"}>Xuất 1 file MP4</button>${ex.status === "running" ? '<span class="muted"><span class="spin"></span>đang xuất…</span>' : ""}${ex.status === "done" ? `<a href="/files/${encodeURIComponent(ex.file)}" target="_blank">${esc(ex.file)}</a>` : ""}${ex.status === "failed" ? `<span class="err">${esc(ex.error)}</span>` : ""}</div>`;
+    else exp = `<p class="hint">Muốn ghép thành 1 file MP4 thì cần cài ffmpeg (không bắt buộc). Xem cả tập ngay trên trang này vẫn được.</p>`;
+    return `<section class="card"><h2>Xem tập</h2><div class="watch">
+      <div><video id="pv" class="media" controls playsinline></video><div id="pvLabel" class="muted" style="margin-top:6px">Bấm "Xem cả tập".</div></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="row"><button class="primary" data-act="play-all" ${have.length ? "" : "disabled"}>▶ Xem cả tập</button><span class="muted">${have.length}/${S.final.length} shot · ${secs} giây${have.length < S.final.length ? " · shot thiếu sẽ bị bỏ qua" : ""}</span></div>
+        <ol class="clips">${S.final.map((c, i) => `<li data-i="${i}" class="${PL.i === i ? "now" : ""}">${esc(c.shot)} · <span class="chip ${c.tier.toLowerCase()}">${c.tier}</span> ${c.duration}s · ${c.src ? (c.src === "lip" ? "đã lồng tiếng" : "video") + ` <button class="link" data-act="play-at" data-i="${i}">xem</button>` : '<span class="muted">chưa có</span>'}${c.line ? ` · <span class="muted">"${esc(c.line)}"</span>` : ""}</li>`).join("")}</ol>
+        ${exp}</div></div></section>`;
+  },
+  after() {
+    const v = $("#pv"); if (!v) return;
+    v.onended = () => playFrom(PL.i + 1);
+  }
+};
+function playFrom(i) {
+  const list = S.final; const v = $("#pv"); if (!v) return;
+  while (i < list.length && !list[i].src) i++;
+  if (i >= list.length) { PL.i = -1; $("#pvLabel").textContent = "Hết tập."; markNow(); return; }
+  PL.i = i; const c = list[i]; const j = jobById(c.job);
+  v.src = src(j || c); v.play().catch(() => {});
+  $("#pvLabel").textContent = `${c.shot} · hạng ${c.tier} · ${c.duration}s${c.line ? ' · "' + c.line + '"' : ""}`;
+  markNow();
+}
+function markNow() { document.querySelectorAll(".clips li").forEach(li => li.classList.toggle("now", Number(li.dataset.i) === PL.i)); }
+
+V.cost = {
+  sig: () => [S.money, S.by_stage, S.balance, S.jobs.filter(j => j.measured).map(j => j.id), S.budget],
+  html() {
+    const m = S.money;
+    let real = null;
+    for (const p of ["wavespeed", "atlas"]) { const b = S.balance[p]; if (b && b.start != null && b.now != null) real = (real || 0) + b.start - b.now; }
+    const order = ["script", "plan", "char", "kf", "vid", "tts", "lip"];
+    const rows = order.filter(k => S.by_stage[k]).map(k => { const b = S.by_stage[k]; return `<tr><td>${esc(S.stage_names[k])}</td><td class="num">${b.done}</td><td class="num">${b.failed}</td><td class="num">${b.active}</td><td class="num">${usd(b.spent, 3)}</td><td class="num">${vnd(b.spent)}</td></tr>`; }).join("");
+    const bal = ["wavespeed", "atlas"].map(p => { const b = S.balance[p] || {}; const name = p === "atlas" ? "Atlas Cloud" : "WaveSpeed";
+      return `<tr><td>${name}${S.keys[p] ? "" : ' <span class="muted">(chưa có key)</span>'}</td><td class="num">${b.start != null ? usd(b.start, 2) : "—"}</td><td class="num">${b.now != null ? usd(b.now, 2) : "—"}</td><td class="num">${b.start != null && b.now != null ? usd(b.start - b.now, 3) : "—"}</td><td class="muted">${esc(b.t || "")}</td></tr>`; }).join("");
+    const measured = S.jobs.filter(j => j.measured);
+    const basis = real != null ? real : m.spent;
+    return `<section class="card"><h2>Chi phí tập này</h2><div class="kpis">
+        <div class="kpi"><div class="muted">Đã chi (ước tính theo giá niêm yết)</div><div class="big">${usd(m.spent, 2)}</div><div class="muted">${vnd(m.spent)}</div></div>
+        <div class="kpi"><div class="muted">Thực chi (số dư tài khoản giảm)</div><div class="big">${real != null ? usd(real, 2) : "—"}</div><div class="muted">${real != null ? vnd(real) : "chưa đọc được số dư"}</div></div>
+        <div class="kpi"><div class="muted">Nếu mọi tập tốn như tập này ×60</div><div class="big">${trieu(basis * 60)}</div><div class="muted">mục tiêu ≤ 30 triệu · hợp đồng 50 triệu</div></div>
+        <div class="kpi"><div class="muted">Trần chi cho lần thử</div><div class="big">${usd(S.budget, 2)}</div><div class="muted">sửa BUDGET_USD trong keys.txt</div></div></div>
+      <p class="hint">Tập đầu còn tốn thêm tiền ảnh nhân vật, bản làm thử và đo giá, nên nhân 60 sẽ cao hơn thực tế một chút.</p></section>
+      <section class="card"><h3>Theo bước</h3><div class="tablewrap"><table><tr><th>Bước</th><th class="num">Xong</th><th class="num">Lỗi/huỷ</th><th class="num">Đang chạy</th><th class="num">Chi USD</th><th class="num">Chi VND</th></tr>${rows || '<tr><td colspan="6" class="muted">Chưa chi gì.</td></tr>'}</table></div>
+        <p class="hint">Việc lỗi không bị tính tiền (Atlas và WaveSpeed hoàn tiền việc lỗi). Chi tiết từng lần gọi: <a href="/files/so_chi.csv" target="_blank">so_chi.csv</a> · nhật ký: <a href="/files/nhat_ky.txt" target="_blank">nhat_ky.txt</a></p></section>
+      <section class="card"><div class="row between"><h3>Số dư tài khoản</h3><div class="row"><button data-act="balance">Cập nhật số dư</button><button data-act="balance-reset">Đặt lại mốc</button></div></div>
+        <div class="tablewrap"><table><tr><th>Nhà cung cấp</th><th class="num">Lúc bắt đầu</th><th class="num">Hiện tại</th><th class="num">Đã giảm</th><th>Cập nhật</th></tr>${bal}</table></div>
+        <p class="hint">Nạp thêm tiền giữa chừng thì bấm "Đặt lại mốc", nếu không số "đã giảm" sẽ sai.</p></section>
+      ${measured.length ? `<section class="card"><h3>Giá đo thật</h3><div class="tablewrap"><table><tr><th>Việc</th><th>Model</th><th class="num">Đơn vị</th><th class="num">Niêm yết/đv</th><th class="num">Đo được/đv</th></tr>${measured.map(j => `<tr><td>${esc(j.id)}</td><td>${esc(modelLabel(j.model))}</td><td class="num">${j.units}</td><td class="num">${usd(j.unit_price, 4)}</td><td class="num">${j.measured.per_unit != null ? usd(j.measured.per_unit, 4) : "—"}</td></tr>`).join("")}</table></div></section>` : ""}`;
+  }
+};
+
+V.settings = {
+  sig: () => [S.settings, S.keys, S.budget],
+  html() {
+    const st = S.settings;
+    const sel = t => `<select data-dirty data-set="video_${t}">${Object.entries(S.presets).map(([id, p]) => `<option value="${esc(id)}" ${id === st["video_" + t] ? "selected" : ""}>${esc(p[0])} (niêm yết ${usd(p[1], 4)}/s)</option>`).join("")}${S.presets[st["video_" + t]] ? "" : `<option selected value="${esc(st["video_" + t])}">${esc(st["video_" + t])}</option>`}</select>`;
+    const tierRow = (t, name) => `<tr><td><span class="chip ${t.toLowerCase()}">${t}</span> ${name}</td><td>${sel(t)}</td><td style="width:130px"><input data-dirty data-set="price_${t}" type="number" step="0.0001" value="${st["price_" + t]}"></td></tr>`;
+    return `<section class="card"><h2>Key và trần chi</h2>
+        <div class="chips"><span class="chip">WaveSpeed: ${S.keys.wavespeed ? "đã có key" : "chưa có key"}</span><span class="chip">Atlas Cloud: ${S.keys.atlas ? "đã có key" : "chưa có key"}</span><span class="chip">Trần: ${usd(S.budget, 2)}</span></div>
+        <p class="hint">Key và trần sửa trong file keys.txt (cùng thư mục với app), lưu lại rồi bấm nút dưới. Key không bao giờ hiện trên trang này.</p>
+        <div><button data-act="reload-keys">Đọc lại keys.txt</button></div></section>
+      <section class="card"><h2>Model video theo hạng shot</h2>
+        <div class="tablewrap"><table><tr><th>Hạng</th><th>Model (Atlas Cloud)</th><th>Giá USD/giây dùng để ước tính</th></tr>${tierRow("A", "hook, twist, cliffhanger")}${tierRow("B", "diễn, thoại")}${tierRow("C", "cảnh đơn giản")}</table></div>
+        <p class="hint">Đổi model thì giá tự điền theo niêm yết; sửa giá nếu đã đo được giá thật. Độ phân giải: ${esc(st.video_resolution)}.</p></section>
+      <section class="card"><h2>Lồng tiếng</h2>
+        <label><input type="radio" name="vm" value="tts" data-dirty data-set="voice_mode" ${st.voice_mode !== "native" ? "checked" : ""} style="width:auto"> Giọng cố định cho từng nhân vật + ghép khẩu hình (như kế hoạch, ~$0.7/tập)</label>
+        <label><input type="radio" name="vm" value="native" data-dirty data-set="voice_mode" ${st.voice_mode === "native" ? "checked" : ""} style="width:auto"> Seedance tự nói trong video (rẻ hơn, nhưng giọng một nhân vật có thể khác nhau giữa các shot)</label>
+        <p class="hint">Đổi chế độ chỉ áp dụng cho video tạo sau đó.</p></section>
+      <section class="card"><h2>Khác</h2><div class="row">
+        <label style="width:220px">Số việc chạy cùng lúc<input data-dirty data-set="parallel" type="number" min="1" max="8" value="${st.parallel}"></label>
+        <label style="width:220px">Số lần tạo tối đa mỗi shot<input data-dirty data-set="max_takes" type="number" min="1" max="6" value="${st.max_takes}"></label></div>
+        <details><summary>Nâng cao: tất cả cài đặt (JSON)</summary><textarea id="rawset" data-dirty rows="18">${esc(JSON.stringify(st, null, 2))}</textarea></details>
+        <div class="row"><button class="primary" data-act="save-settings">Lưu cài đặt</button></div></section>
+      <section class="card"><h2>Tập mới</h2><p class="hint">Cất toàn bộ tập này vào output/luu_… (không xoá gì) rồi bắt đầu lại từ bước 1.</p><div><button data-act="new-episode">Cất tập này, bắt đầu tập mới</button></div></section>`;
+  },
+  after() {
+    document.querySelectorAll('select[data-set^="video_"]').forEach(el => el.addEventListener("change", () => {
+      const t = el.dataset.set.slice(-1), p = S.presets[el.value];
+      const inp = document.querySelector(`input[data-set="price_${t}"]`); if (p && inp) inp.value = p[1];
+    }));
+  }
+};
+
+// ---------- render
+function anyPlaying() { return [...document.querySelectorAll("#view video, #view audio")].some(m => !m.paused && !m.ended); }
+function renderView(force) {
+  const view = V[tab];
+  const sig = tab + "|" + JSON.stringify(view.sig());
+  if (!force && sig === lastSig) return;
+  if (!force && dirty[tab]) { showDirty(); return; }
+  if (!force && anyPlaying()) return;
+  lastSig = sig;
+  $("#view").innerHTML = (dirty[tab] ? dirtyBar() : "") + view.html();
+  if (view.after) view.after();
+}
+function dirtyBar() { return `<div class="warnbox dirty row between" id="dirtybar"><span>Có thay đổi chưa lưu trên trang này.</span><button data-act="discard">Bỏ thay đổi</button></div>`; }
+function showDirty() { if (!$("#dirtybar")) $("#view").insertAdjacentHTML("afterbegin", dirtyBar()); }
+function renderAll(force) { if (!S) return; renderHeader(); renderNav(); renderView(force); }
+
+async function refresh(force) {
+  if (fatal) return;
+  try { S = await api("/api/state"); $("#offline").hidden = true; }
+  catch (e) { if (!fatal) $("#offline").hidden = false; return; }
+  renderAll(force);
+}
+async function loop() { await refresh(); setTimeout(loop, S && active() ? 2000 : 5000); }
+
+// ---------- actions
+function collectPlan() {
+  const p = JSON.parse(JSON.stringify(S.plan));
+  document.querySelectorAll("[data-char]").forEach(row => { const c = p.characters.find(x => x.id === row.dataset.char); row.querySelectorAll("[data-f]").forEach(el => c[el.dataset.f] = el.value); });
+  document.querySelectorAll("[data-loc]").forEach(row => { const l = p.locations.find(x => x.id === row.dataset.loc); row.querySelectorAll("[data-f]").forEach(el => l[el.dataset.f] = el.value); });
+  document.querySelectorAll("[data-shot]").forEach(row => { const s = p.shots.find(x => x.id === row.dataset.shot); row.querySelectorAll("[data-f]").forEach(el => {
+    const f = el.dataset.f; if (f === "cast") s.cast = el.value.split(/[,;]/).map(x => x.trim()).filter(Boolean); else if (f === "duration") s.duration = Number(el.value); else s[f] = el.value; }); });
+  return p;
+}
+function collectSettings() {
+  let st = {};
+  const raw = $("#rawset");
+  if (raw && raw.closest("details").open) { try { st = JSON.parse(raw.value); } catch (e) { toast("JSON cài đặt bị lỗi: " + e.message, true); return null; } }
+  document.querySelectorAll("[data-set]").forEach(el => { if (el.type === "radio") { if (el.checked) st[el.dataset.set] = el.value; } else st[el.dataset.set] = el.value; });
+  return st;
+}
+async function saveTab() {
+  let r = {ok: true};
+  if (tab === "script") {
+    r = await api("/api/premise", {text: $("#premise").value});
+    if (!r.error) r = await api("/api/script", {text: $("#script").value});
+  } else if (tab === "plan" && S.plan) r = await api("/api/plan", {plan: collectPlan()});
+  else if (tab === "settings") { const st = collectSettings(); if (!st) return false; r = await api("/api/settings", {settings: st}); }
+  if (r.error) { toast(r.error, true); return false; }
+  dirty[tab] = false; return true;
+}
+async function runStage(d) {
+  if (dirty[tab] && ["script", "plan", "settings"].includes(tab)) { if (!(await saveTab())) return; await refresh(true); }
+  const body = {stage: d.stage, target: d.target || null, redo: d.redo === "1"};
+  const dry = await api("/api/run", Object.assign({dry: true}, body));
+  if (dry.error) return toast(dry.error, true);
+  if (!dry.n) return toast("Không có việc nào cần làm ở bước này.");
+  const m = S.money;
+  const ok = await ask(`Chạy ${dry.n} việc · ước tính ~${usd(dry.est)}`,
+    `<p class="muted">Đã chi ~${usd(m.spent, 2)} · đang chờ ~${usd(m.reserved, 2)} · trần ${usd(S.budget, 2)}. Tiền thật sẽ bị trừ khi gửi.</p><ul>${dry.items.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`, "Chạy");
+  if (!ok) return;
+  const r = await api("/api/run", body);
+  if (r.error) return toast(r.error, true);
+  toast(`Đã xếp hàng ${r.n} việc (~${usd(r.est)})`);
+  await refresh(true);
+}
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-tab],[data-act]");
+  if (!t || t.disabled) return;
+  if (t.dataset.tab) {
+    tab = t.dataset.tab; try { localStorage.setItem("ktoon_tab", tab); } catch (err) {}
+    window.scrollTo(0, 0); renderAll(true); return;
+  }
+  const d = t.dataset;
+  try {
+    switch (d.act) {
+      case "run": await runStage(d); break;
+      case "pick": { const j = jobById(d.job); if (!j || j.status !== "done") { if (j && j.error) toast(j.error, j.status !== "cancelled"); break; } const r = await api("/api/pick", {job: d.job}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "save-premise": case "save-script": case "save-plan": case "save-settings": { if (await saveTab()) { toast("Đã lưu"); await refresh(true); } break; }
+      case "use-result": { const r = await api("/api/use_result", {job: d.job}); if (r.error) toast(r.error, true); else { dirty.script = false; toast("Đã dùng bản này"); await refresh(true); } break; }
+      case "discard": dirty[tab] = false; renderAll(true); break;
+      case "reload-keys": { const r = await api("/api/reload_keys", {}); toast(`WaveSpeed: ${r.keys.wavespeed ? "có key" : "chưa có"} · Atlas: ${r.keys.atlas ? "có key" : "chưa có"} · trần ${usd(r.budget, 2)}`); setTimeout(() => refresh(true), 2500); break; }
+      case "balance": case "balance-reset": { await api("/api/balance", {reset_start: d.act === "balance-reset"}); toast("Đã cập nhật số dư"); await refresh(true); break; }
+      case "recheck": { const r = await api("/api/recheck", {job: d.job}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "cancel": { const r = await api("/api/cancel", {}); toast(`Đã huỷ ${r.n} việc chưa gửi (không tốn tiền)`); await refresh(true); break; }
+      case "export": { const r = await api("/api/export", {}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "new-episode": { if (!(await ask("Bắt đầu tập mới?", "<p>Toàn bộ tập này được cất vào thư mục output/luu_… (không xoá gì). Trang sẽ quay về bước 1.</p>", "Cất và bắt đầu"))) break; const r = await api("/api/new_episode", {}); if (r.error) toast(r.error, true); else { toast("Đã cất vào " + r.archived); tab = "script"; dirty = {}; } await refresh(true); break; }
+      case "play-all": playFrom(0); break;
+      case "play-at": playFrom(Number(d.i)); break;
+    }
+  } catch (err) { if (err.message !== "token") toast("Lỗi: " + err.message, true); }
+});
+document.addEventListener("input", e => { if (e.target.closest("[data-dirty]") && !dirty[tab]) { dirty[tab] = true; showDirty(); } });
+document.addEventListener("change", e => { if (e.target.closest("[data-dirty]") && !dirty[tab]) { dirty[tab] = true; showDirty(); } });
+window.addEventListener("beforeunload", e => { if (Object.values(dirty).some(Boolean)) { e.preventDefault(); e.returnValue = ""; } });
+loop();
+</script>
+</body>
+</html>

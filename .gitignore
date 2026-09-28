@@ -1,0 +1,21 @@
+.env
+data/
+*.mp4
+*.mov
+*.wav
+*.png
+*.jpg
+__pycache__/
+.venv/
+
+# added 2026-09-28: never push keys, run outputs or archives
+keys.txt
+**/keys.txt
+**/output/
+**/projects/
+**/export/
+*.zip
+*.mp3
+.pytest_cache/
+# mock media used by the offline tests may be pushed
+!ktoon_tap_thu/tests_mock/files/*

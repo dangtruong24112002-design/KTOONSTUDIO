@@ -1,0 +1,20 @@
+<div id="scripts" class="panel">
+  <h2><span class="step">2</span>Kịch bản đã có · bấm Phân tích</h2>
+  {% for m in msgs or [] %}<div class="msg ok">{{ m }}</div>{% endfor %}
+  {% for m in errors or [] %}<div class="msg bad">{{ m }}</div>{% endfor %}
+  {% if files %}
+  <ul class="files">
+    {% for f in files %}
+    <li>
+      <span class="name">{{ f.name }}<br><span class="muted">{{ f.kb }} KB · {{ f.mtime }}</span></span>
+      <button class="primary" hx-post="/analyze" hx-vals='{"filename": {{ f.name|tojson }}}'
+              hx-target="#episodes" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-on::after-request="document.getElementById('shots').innerHTML=''">
+        Phân tích<span class="spin">…</span></button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Chưa có kịch bản. Kéo thả file ở ô bên trên, hoặc bỏ file vào thư mục:<br><code>{{ folder }}</code><br>rồi tải lại trang (F5).</p>
+  {% endif %}
+</div>

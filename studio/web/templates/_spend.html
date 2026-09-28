@@ -1,0 +1,20 @@
+<div id="spend" class="panel" hx-get="/spend" hx-trigger="spend-changed from:body" hx-swap="outerHTML">
+  <div class="spend">
+    <div>
+      <div class="label">Tổng đã tiêu (API)</div>
+      <div class="big">${{ '%.4f'|format(spend.total) }}</div>
+      <div class="muted">{{ spend.calls }} lần gọi có ghi sổ</div>
+    </div>
+    <div>
+      <div class="label">Tháng này / trần tháng</div>
+      <div><strong>${{ '%.2f'|format(spend.month) }}</strong> / ${{ '%.0f'|format(spend.month_limit) }}</div>
+      <div class="bar {% if spend.month_pct >= 80 %}hot{% endif %}"><span style="width: {{ spend.month_pct }}%"></span></div>
+    </div>
+    <div>
+      <div class="label">Trần mỗi tập</div>
+      <div><strong>${{ '%.0f'|format(spend.per_episode_limit) }}</strong></div>
+      <div class="muted">chạm trần là tự dừng, hỏi anh</div>
+    </div>
+    <div class="muted" style="margin-left:auto">Phân tích kịch bản ở màn này: <strong>miễn phí</strong></div>
+  </div>
+</div>

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block body %}
+{% include "_spend.html" %}
+
+<div class="grid">
+  <div>
+    <div class="panel">
+      <h2><span class="step">1</span>Nạp kịch bản</h2>
+      <form id="up" hx-post="/upload" hx-target="#scripts" hx-swap="outerHTML" hx-encoding="multipart/form-data"
+            hx-on::after-request="if(event.detail.successful){this.reset(); document.getElementById('drop-label').textContent='Kéo thả file vào đây';}">
+        <label class="drop" id="drop">
+          <strong id="drop-label">Kéo thả file vào đây</strong>
+          hoặc bấm để chọn file · nhận .txt .md .docx .pdf
+          <input type="file" name="files" multiple accept=".txt,.md,.docx,.pdf" hidden id="file-input">
+        </label>
+        <p class="muted" style="margin:12px 0 6px">…hoặc dán chữ kịch bản vào đây:</p>
+        <textarea name="pasted" placeholder="EPISODE 1&#10;INT. OFFICE - NIGHT&#10;Ethan looks up.&#10;ETHAN: You thought I was nobody."></textarea>
+        <div class="row" style="margin-top:8px">
+          <input class="grow" type="text" name="pasted_name" placeholder="Tên file cho đoạn dán (không bắt buộc), ví dụ pilot_ep01">
+          <button class="primary" type="submit">Lưu</button>
+        </div>
+      </form>
+    </div>
+
+    {% include "_scripts.html" %}
+
+    <details class="panel">
+      <summary><strong>Viết kịch bản thế nào để máy đọc đúng?</strong></summary>
+      <ul class="muted">
+        <li>Đầu mỗi tập: <code>EPISODE 1</code> hoặc <code>Tập 1</code></li>
+        <li>Đầu mỗi cảnh: <code>INT. PENTHOUSE OFFICE - NIGHT</code> / <code>EXT. STREET - DAY</code> hoặc <code>CẢNH 1: văn phòng</code></li>
+        <li>Lời thoại: <code>ETHAN: You thought I was nobody.</code> hoặc tên VIẾT HOA một dòng, câu thoại dòng dưới</li>
+        <li>Không bắt buộc: <code>LOGLINE:</code>, <code>HOOK:</code>, <code>CLIFFHANGER:</code></li>
+        <li>Các dòng còn lại là hành động. Mỗi đoạn hành động = một shot.</li>
+      </ul>
+      <p class="muted">Máy phân tích miễn phí theo quy tắc. Bản phân tích bằng AI (chia shot, góc máy hay hơn) sẽ bật khi có key LLM — việc đó tốn tiền nên sẽ hỏi anh trước.</p>
+    </details>
+  </div>
+
+  <div>
+    {% include "_episodes.html" %}
+    <div id="shots"></div>
+  </div>
+</div>
+
+<script>
+  const drop = document.getElementById('drop'), input = document.getElementById('file-input'),
+        form = document.getElementById('up'), label = document.getElementById('drop-label');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => {
+    input.files = e.dataTransfer.files;
+    label.textContent = 'Đang lưu ' + input.files.length + ' file…';
+    htmx.trigger(form, 'submit');
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) { label.textContent = 'Đang lưu ' + input.files.length + ' file…'; htmx.trigger(form, 'submit'); }
+  });
+</script>
+{% endblock %}

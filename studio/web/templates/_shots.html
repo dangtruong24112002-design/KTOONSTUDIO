@@ -1,0 +1,42 @@
+<div class="panel">
+  <h2><span class="step">4</span>Shot list · Tập {{ '%02d'|format(ep.number) }}{% if ep.title %} — {{ ep.title }}{% endif %}</h2>
+  {% if ep.hook or ep.cliffhanger %}
+  <p>{% if ep.hook %}<span class="tag">Hook</span> {{ ep.hook }}<br>{% endif %}
+     {% if ep.cliffhanger %}<span class="tag">Cliffhanger</span> {{ ep.cliffhanger }}{% endif %}</p>
+  {% endif %}
+  <table>
+    <thead><tr><th>Shot</th><th>Bối cảnh</th><th>Hành động</th><th>Thoại (EN)</th><th>Nhân vật</th><th>Góc máy</th><th>Giây</th></tr></thead>
+    <tbody>
+    {% for s in shots %}
+      <tr>
+        <td><code>{{ s.id }}</code></td>
+        <td>{% if s.loc_code %}<span class="tag">{{ s.loc_code }}</span> {{ s.loc_name }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ s.action }}</td>
+        <td class="dialogue">{{ s.dialogue_en or '' }}</td>
+        <td>{% for c in s.character_ids|loads %}<span class="tag" title="{{ char_names.get(c, '') }}">{{ c }} {{ char_names.get(c, '') }}</span> {% endfor %}</td>
+        <td class="muted">{{ s.camera }}</td>
+        <td>{{ '%.0f'|format(s.duration_s) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Tổng {{ shots|length }} shot · {{ '%.0f'|format(shots|sum(attribute='duration_s')) }} giây ·
+     file JSON: <code>{{ json_path }}</code></p>
+</div>
+
+<div class="panel">
+  <h2>Cổng 1 · Duyệt shot list tập này</h2>
+  {% if last_gate %}
+    <div class="msg {% if last_gate.status == 'approved' %}ok{% else %}bad{% endif %}">
+      {{ 'Đã duyệt' if last_gate.status == 'approved' else 'Đã trả lại' }} lúc {{ last_gate.ts.replace('T', ' ') }}
+      {% if last_gate.note %} · Ghi chú: {{ last_gate.note }}{% endif %}
+    </div>
+  {% endif %}
+  <form hx-post="/episode/{{ ep.id }}/gate1" hx-target="#shots">
+    <textarea name="note" placeholder="Ghi chú cho lần sửa sau (không bắt buộc). Ví dụ: shot 3 cần cận mặt Vanessa." style="min-height:60px"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="ok" name="decision" value="approved">✓ Duyệt</button>
+      <button class="bad" name="decision" value="rejected">✗ Trả lại, cần sửa</button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,37 @@
+CHẠY THỬ 1 TẬP — KTOONSTUDIO (bản thử, giao diện tạm)
+======================================================
+Cần: Python 3 (Windows: cài từ python.org, tick "Add python.exe to PATH")
+     và tài khoản Atlas Cloud + WaveSpeed đã nạp tiền.
+
+BƯỚC 1 — Dán key
+  Mở keys.txt bằng Notepad, dán key WaveSpeed và key Atlas vào sau dấu =, lưu lại.
+  Không dán key vào chat, không chụp màn hình file này.
+
+BƯỚC 2 — Mở app
+  Windows: bấm đúp chay_windows.bat
+  Mac:     chuột phải chay_mac.command > Open
+  Trình duyệt tự mở trang http://127.0.0.1:8765
+  Giữ cửa sổ đen mở trong lúc dùng. Đóng nó là tắt app.
+
+BƯỚC 3 — Làm lần lượt trên trang
+  1 Kịch bản   Sửa ý tưởng (có sẵn mẫu) rồi "Viết kịch bản bằng GPT" (~$0.2).
+               Có kịch bản sẵn thì dán vào rồi bấm Lưu.
+  2 Shot list  "Tạo shot list bằng Gemini" (~$0.04). Sửa tay nếu cần, bấm Lưu.
+  3 Nhân vật   Tạo ảnh, chọn bản đẹp nhất.
+  4 Keyframe   Tạo 16-20 ảnh, làm lại ảnh chưa ưng.
+               Duyệt kỹ ở bước này vì video đắt hơn ảnh nhiều lần.
+  5 Video      Bấm "Đo giá thật" trước (3 shot) để biết giá thật của Seedance 2.5 ở 720p,
+               rồi "Tạo video còn thiếu".
+  6 Lồng tiếng Tạo giọng + khẩu hình cho các shot có thoại.
+  7 Xem tập    Xem liền mạch cả tập.
+  Mỗi lần chạy, app hiện chi phí dự tính và hỏi lại trước khi tiêu tiền.
+
+CHI PHÍ
+  Tab "Chi phí": chi ước tính, thực chi theo số dư tài khoản, nhân 60 tập ra tiền Việt.
+  Chi tiết từng lần gọi: output/so_chi.csv   Nhật ký: output/nhat_ky.txt
+  Trần mặc định $20 (BUDGET_USD trong keys.txt). Cả tập thường khoảng $8-15 tùy số lần làm lại.
+
+KHI CÓ LỖI
+  Lỗi hiện ngay dưới shot. Gửi Claude dòng lỗi, hoặc gửi file output/nhat_ky.txt
+  (file này không chứa key).
+  Đóng app giữa chừng cũng không sao: mở lại là việc đã gửi chạy tiếp, không bị tính tiền lại.

@@ -1,0 +1,30 @@
+<div id="episodes" class="panel" hx-get="/episodes" hx-trigger="episodes-changed from:body" hx-swap="outerHTML">
+  <h2><span class="step">3</span>Danh sách tập</h2>
+  {% for m in msgs or [] %}<div class="msg ok">{{ m }}</div>{% endfor %}
+  {% for m in warnings or [] %}<div class="msg warn">⚠ {{ m }}</div>{% endfor %}
+  {% for m in errors or [] %}<div class="msg bad">{{ m }}</div>{% endfor %}
+  {% if episodes %}
+  <table>
+    <thead><tr><th>Tập</th><th>Tên / logline</th><th>Số shot</th><th>Thời lượng</th><th>Trạng thái</th></tr></thead>
+    <tbody>
+    {% for e in episodes %}
+      <tr class="click" hx-get="/episode/{{ e.id }}" hx-target="#shots"
+          hx-on::after-request="document.querySelectorAll('#episodes tr').forEach(r=>r.classList.remove('sel')); this.classList.add('sel')">
+        <td><strong>{{ '%02d'|format(e.number) }}</strong></td>
+        <td>{{ e.title or '—' }}{% if e.logline %}<br><span class="muted">{{ e.logline }}</span>{% endif %}</td>
+        <td>{{ e.n_shots }}</td>
+        <td>{{ '%.0f'|format(e.secs) }} giây</td>
+        <td>
+          {% set st = e.status %}
+          <span class="tag {% if st == 'gate1_approved' %}ok{% elif st == 'gate1_rejected' %}bad{% else %}warn{% endif %}">
+            {{ EP_STATUS_VI.get(st, st) }}</span>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Bấm vào một tập để xem shot list.</p>
+  {% else %}
+  <p class="muted">Chưa có tập nào. Nạp kịch bản rồi bấm <strong>Phân tích</strong>.</p>
+  {% endif %}
+</div>
