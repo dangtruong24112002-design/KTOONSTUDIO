@@ -1,0 +1,79 @@
+TẬP THỬ V2 — KTOONSTUDIO (sequence 30 giây + Omni Reference)
+==============================================================
+Cần: Python 3 (Windows: cài từ python.org, tick "Add python.exe to PATH")
+     ffmpeg (để cắt khung hình sửa lỗi và ghép video — không có vẫn dùng được phần còn lại)
+     Tài khoản WaveSpeed (ảnh + LLM) và Atlas Cloud (video) đã nạp tiền.
+
+BƯỚC 1 — Dán key
+  Mở keys.txt (cùng thư mục với app; nếu chưa có, app tự tạo file trống khi mở lần đầu).
+  Dán key WaveSpeed và Atlas vào sau dấu =, sửa BUDGET_USD nếu muốn (mặc định $18; lần thử đầu
+  tiên có thể tăng lên ~$30 vì còn tốn tiền làm ảnh tham chiếu và đo giá thật). Lưu lại.
+  Không dán key vào chat, không chụp màn hình file này.
+
+BƯỚC 2 — Mở app
+  Windows: bấm đúp chay_windows.bat
+  Mac:     chuột phải chay_mac.command > Open
+  Trình duyệt tự mở trang http://127.0.0.1:8766 (hoặc cổng gần đó nếu 8766 đang bận).
+  Giữ cửa sổ đen mở trong lúc dùng. Đóng nó là tắt app; việc đang gửi sẽ tiếp tục khi mở lại.
+
+BƯỚC 3 — Làm lần lượt trên trang (8 tab)
+  1 Dự án      Đặt tên dự án, số tập, dán kịch bản. "Phân tích style" (GPT) ra một đoạn mô tả
+               phong cách, sửa được.
+  2 Tham chiếu Bấm "Đề xuất danh sách (GPT)" để GPT tự liệt kê nhân vật/bối cảnh/prop từ kịch bản
+               (mục "chưa duyệt" — bấm Duyệt từng mục trước khi tạo ảnh), hoặc tự thêm bằng nút "+".
+               - Nhân vật: tải ảnh thành phần (mặt/tóc/thân/đồ), gắn nguồn ai|real và dùng cho gì.
+                 MẶT/MẮT CHỈ NHẬN ẢNH AI — ảnh người thật cho mặt sẽ bị app từ chối (hard rule).
+               - Rồi bấm "Tạo ảnh tham chiếu còn thiếu" (1 nút) để tạo ảnh nhân vật + sheet 21:9 +
+                 ảnh bối cảnh + ảnh prop cho mọi mục đã duyệt. Nếu nhân vật chưa có ảnh, nút này tạo
+                 ảnh nền trắng trước, tạo sheet sau — có thể cần bấm lại nút một lần nữa sau khi ảnh
+                 nhân vật xong (sheet cần ảnh nhân vật làm trước).
+               - Mỗi ảnh có khung "Chat sửa ảnh" riêng: gõ yêu cầu (tiếng Việt được), chọn model sửa
+                 (Seedream rẻ / Nano Banana Pro / GPT Image — giá GPT Image chưa xác nhận, kiểm tra
+                 lại ở lần chạy key thật đầu tiên), bấm Gửi. Mỗi lần sửa ra bản mới (v2, v3…), bấm vào
+                 bản cũ trong dãy "t1 t2 t3…" để chọn làm bản chính rồi sửa tiếp từ đó. Nút "Nhận xét
+                 ảnh" cho GPT xem và chỉ lỗi, không tốn tiền sửa ảnh (ẩn tự động nếu LLM không nhận
+                 ảnh — xem mục kiểm tra ở lần chạy đầu).
+  3 Sequences  Dán shot list có sẵn (chữ hoặc bảng copy từ Excel/Docs) nếu có, hoặc để trống cho GPT
+               tự viết. Bấm "Chuẩn hoá/Tạo shot list", rồi "Chia sequences" — GPT gom các shot vào
+               S1 (hook, 0-30s) / S2 (30-60s, chia 2 phần 15s) / S3 (cliffhanger, 60-90s), giữ nguyên
+               số shot. Mỗi shot có thể bật "storyboard": ảnh 9:16 dựng từ sheet nhân vật + ảnh bối
+               cảnh, dùng làm tham chiếu bố cục thêm cho sequence (có công tắc bật/tắt mỗi sequence).
+  4 Prompt     "Tạo prompt (GPT)" cho từng sequence (S1/S2a/S2b/S3), rồi "Duyệt bằng Gemini". Sửa tay
+               nếu cần rồi tick "Đã duyệt" — phải duyệt mới sinh video được.
+  5 Gen & QC   "Tạo video" từng sequence. S2b tự chờ khung hình cuối của S2a. Tối đa 2 lần tạo đầy đủ
+               mỗi sequence (đổi được trong dữ liệu cài đặt); hết lượt thì dùng tab 6 để vá từng đoạn.
+               Tick 3 ô QC (nét/đúng người, raccord đúng, giọng/khẩu hình hợp), Pass hoặc Fail.
+  6 Sửa đoạn   Chọn sequence + giây bắt đầu/kết thúc (4-10s) của đoạn hỏng, cắt khung hình (cần
+     hỏng      ffmpeg), gõ mô tả cần sửa, "Tạo ảnh sửa", duyệt, rồi "Vá đoạn này".
+  7 Xuất       Copy các clip đã chọn vào export/EP<nn>/ theo thứ tự + danh_sach.txt. Ghép 1 file MP4
+               nếu máy có ffmpeg và đã có đủ 4 clip S1/S2a/S2b/S3.
+  8 Chi phí    Chi đã dùng, thực chi theo số dư, chiếu ×60 tập ra VND — tách riêng "làm 1 lần cho cả
+               series" (ảnh nhân vật/bối cảnh/prop) và "lặp lại mỗi tập" (prompt/storyboard/video),
+               vì chỉ phần lặp lại mỗi tập mới nhân 60. Mỗi lần chạy, app hiện chi phí dự tính và hỏi
+               lại trước khi tiêu tiền thật.
+
+CHI PHÍ
+  Trần mặc định $18/tập (BUDGET_USD trong keys.txt). Tối đa 2 lần tạo đầy đủ mỗi sequence, sau đó chỉ
+  còn sửa từng đoạn 4-10s. Lần tạo video đầu tiên của mỗi model (2.5 và 2.0) tự "đo giá thật" bằng
+  cách đọc số dư Atlas trước/sau — nếu giá đo được của 2.5 vượt $0.16/giây, app tự cảnh báo và có thể
+  đổi các sequence 2.5 chưa tạo sang 2.0 (đổi lại được ở mục model trong tab Gen & QC).
+  Chi tiết từng lần gọi: output/so_chi.csv   Nhật ký: output/nhat_ky.txt
+
+KHI CÓ LỖI
+  Lỗi hiện ngay dưới mục liên quan. Gửi Claude dòng lỗi, hoặc gửi file output/nhat_ky.txt (không chứa
+  key). Đóng app giữa chừng cũng không sao: mở lại là việc đã gửi (ảnh/video) chạy tiếp, không bị tính
+  tiền lại. Việc gọi LLM (kịch bản, shot list, prompt...) bị tắt giữa chừng thì mất, bấm tạo lại (chưa
+  bị tính tiền vì tiền chỉ ghi sau khi có kết quả).
+
+CẦN KIỂM TRA Ở LẦN CHẠY KEY THẬT ĐẦU TIÊN (xem thêm docs/SPEC_TAP_THU_V2.md §12)
+  - Giá thật ở 720p của Seedance 2.5 và 2.0 reference-to-video (app tự đo, xem tab Gen & QC).
+  - Endpoint/khuôn dạng upload file của Atlas (app đang tải file lên qua WaveSpeed rồi dùng URL đó
+    cho cả WaveSpeed và Atlas — cần xác nhận Atlas nhận URL ngoài).
+  - Cú pháp @Image trong prompt Seedance 2.0 (trang model ghi "image 1", chưa rõ @Image1 có chạy không).
+  - Trường trả về khung hình cuối (return_last_frame) — app đang thử vài tên trường phổ biến.
+  - WaveSpeed LLM có nhận ảnh đính kèm không (ảnh hưởng nút "Nhận xét ảnh" và chat sửa ảnh có đính
+    kèm ảnh mẫu) — nếu không nhận, app tự ẩn nút "Nhận xét ảnh" sau lần thử đầu.
+  - Tên model và giá thật của "GPT Image" bản edit trên WaveSpeed (mục Chat sửa ảnh) — hiện đang để
+    tạm openai/gpt-image-1/edit, giá tạm $0.19, CẦN xác nhận lại với trang giá của WaveSpeed.
+  - Prompt hook có yếu tố gợi cảm (không lộ) có bị model chặn không.
+  - URL file trả về sống được bao lâu (app tải về máy ngay, nhưng nên biết để tránh lỗi khi thử lại).

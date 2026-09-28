@@ -11,10 +11,81 @@ HERE = Path(__file__).resolve().parent
 WS_KEY, AT_KEY = "Bearer test-ws-key-123456", "Bearer test-atlas-key-123456"
 BAL = {"ws": 50.0, "atlas": 30.0}
 ATLAS_PRICE = {"bytedance/seedance-2.5/image-to-video": 0.30, "bytedance/seedance-2.0/image-to-video": 0.112,
-               "bytedance/seedance-2.0-fast/image-to-video": 0.0581, "bytedance/seedance-2.0-mini/image-to-video": 0.0242}
+               "bytedance/seedance-2.0-fast/image-to-video": 0.0581, "bytedance/seedance-2.0-mini/image-to-video": 0.0242,
+               # tap_thu_v2: reference-to-video. 2.5 is charged well above its $0.134 list price on purpose,
+               # to exercise the price-probe warning (spec SPEC_TAP_THU_V2.md §4.3).
+               "bytedance/seedance-2.5/reference-to-video": 0.30, "bytedance/seedance-2.0/reference-to-video": 0.09}
 LOG, POLLS, PRED, N = [], {}, {}, [0]
 FAIL_FIRST_LIP = [True]
 LOCK = threading.Lock()
+
+# ---------------------------------------------------------------- tap_thu_v2 canned LLM / media outputs
+STYLE_TEXT = ("Photoreal, warm-cool contrast lighting; handheld push-ins on close-ups, locked wide on "
+              "establishing shots. Corporate-thriller palette: cold blue corridors, warm amber boardroom. "
+              "Pacing is fast in the hook, slows for the twist, snaps back for the cliffhanger. Camera favours "
+              "shoulder-level medium shots with a shallow depth of field. Mood: quiet tension under a polished "
+              "surface, breaking into open confrontation by the final beat.")
+
+
+def shots_json_v2():
+    descs = ["Ethan steps out of the elevator, toolbox in hand.", "Claire stops him in the corridor.",
+             "Mark confronts Ethan, spills coffee on him.", "Claire hands Ethan a napkin, a look passes between them.",
+             "Board members wait in the glass boardroom.", "Ethan steps in, calm."]
+    shots = []
+    for i, desc in enumerate(descs, 1):
+        cast = ["Ethan", "Claire"] if i in (2, 4) else (["Ethan", "Mark"] if i == 3 else ["Ethan"])
+        loc = "Corridor" if i <= 4 else "Boardroom"
+        speaker, line = "", ""
+        if i == 2:
+            speaker, line = "Claire", "You're not supposed to be up here."
+        elif i == 3:
+            speaker, line = "Mark", "Janitors use the service lift, pal."
+        elif i == 6:
+            speaker, line = "Ethan", "Actually... I own this building."
+        shots.append({"id": f"SH{i:02d}", "duration": 5, "location": loc, "cast": cast, "props": [],
+                      "desc": desc, "speaker": speaker, "line": line})
+    return json.dumps({"shots": shots})
+
+
+def seq_json_v2():
+    return json.dumps({
+        "S1": {"shot_ids": ["SH01", "SH02"], "tag": "hook", "raccord_in": "", "raccord_out": "ends on Ethan's face, held"},
+        "S2": {"shot_ids": ["SH03", "SH04"], "tag": "key", "raccord_in": "opens on the corridor", "raccord_out": "cut to the boardroom door"},
+        "S3": {"shot_ids": ["SH05", "SH06"], "tag": "cliffhanger", "raccord_in": "", "raccord_out": ""},
+    })
+
+
+def preprod_json_v2():
+    return json.dumps({
+        "characters": [{"name": "Ethan", "desc": "33-year-old billionaire disguised as maintenance staff, navy work jacket, calm and observant."},
+                       {"name": "Claire", "desc": "29-year-old sharp CFO in a cream blouse."},
+                       {"name": "Mark", "desc": "40-year-old floor manager in a grey suit, dismissive."}],
+        "environments": [{"name": "Corridor", "tag": "INT", "time": "day", "desc": "40th floor glass corridor, cool daylight."},
+                         {"name": "Boardroom", "tag": "INT", "time": "day", "desc": "Glass boardroom, skyline view."}],
+        "props": [{"name": "Toolbox", "desc": "Worn metal maintenance toolbox."}]})
+
+
+REWRITE_TEXT = ("Keep the exact identity, face, aspect ratio and background unchanged; only lighten the jacket "
+                "color to navy blue as requested, nothing else.")
+CRITIQUE_TEXT = ("- Missing the back view on the sheet's right panel.\n- Background reads slightly off-white, "
+                 "not pure white.\n- Otherwise consistent identity and usable.")
+
+
+def prompt_text_v2(target):
+    return (f"[Creatives Description] Photoreal vertical 9:16 microdrama, generation {target}.\n"
+            "[One-sentence Summary] Ethan confronts the truth of his double life in a glass corporate tower, "
+            "slow push-in on a corporate-thriller palette.\n"
+            "Based on the uploaded references, strictly maintain the face and features of @Image1, the "
+            "composition and space of @Image2; strictly lock character positions.\n"
+            "[Plot per timestamp] [0-3s] hook, close on his face. [3-30s] dialogue beat, medium two-shot.\n"
+            "[Global supplement] cool daylight corridor, shoulder-level camera, ambient office hum.\n"
+            "Prohibited: no subtitles, no BGM (unless explicitly requested), no exaggerated movements, no extra "
+            "dialogue, no runny nose or premature tears, no AI-feel artifacts, no fast cuts when the shot is one "
+            "continuous take.")
+
+
+def review_json_v2():
+    return json.dumps({"pass": True, "notes": ""})
 
 SCRIPT = """TÓM TẮT (tiếng Việt): Ethan, tỷ phú giả làm thợ bảo trì, bị Mark sỉ nhục ở tầng 40. Claire giúp anh. Cuối tập Ethan bước vào phòng họp: anh là chủ tòa nhà.
 CHARACTERS: Ethan Cole (33): navy work jacket. Claire Hayes (29): cream blouse. Mark Dalton (40): grey suit.
@@ -66,8 +137,16 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(n) or b"{}")
+        raw = self.rfile.read(n) if n else b""
         auth = self.headers.get("Authorization")
+        if self.path in ("/ws/media/upload/binary", "/atlas/uploadMedia"):
+            want = WS_KEY if self.path.startswith("/ws/") else AT_KEY
+            with LOCK:
+                LOG.append({"path": self.path, "body": None, "auth": auth, "t": time.time(), "bytes": len(raw)})
+            if auth != want:
+                return self.send(401, {"error": "bad key"})
+            return self.send(200, {"code": 200, "data": {"url": f"http://127.0.0.1:{PORT}/files/img.jpg"}})
+        body = json.loads(raw or b"{}")
         with LOCK:
             LOG.append({"path": self.path, "body": body, "auth": auth, "t": time.time()})
         if self.path == "/llm/chat/completions":
@@ -75,7 +154,26 @@ class H(BaseHTTPRequestHandler):
                 return self.send(401, {"error": "bad key"})
             sysmsg = body["messages"][0]["content"]
             time.sleep(0.5)
-            content = SCRIPT if "head writer" in sysmsg else plan_json()
+            if "head writer" in sysmsg:
+                content = SCRIPT
+            elif "PARSER, not a writer" in sysmsg:
+                content = shots_json_v2()
+            elif "production coordinator" in sysmsg:
+                content = preprod_json_v2()
+            elif "cinematographer" in sysmsg:
+                content = STYLE_TEXT
+            elif "exactly 3 sequences" in sysmsg:
+                content = seq_json_v2()
+            elif "Omni Reference prompt" in sysmsg:
+                content = prompt_text_v2("S1")
+            elif "review one Seedance video prompt" in sysmsg:
+                content = review_json_v2()
+            elif "image-edit instruction" in sysmsg:
+                content = REWRITE_TEXT
+            elif "concrete problems only" in sysmsg:
+                content = CRITIQUE_TEXT
+            else:
+                content = plan_json()
             with LOCK:
                 BAL["ws"] -= 0.02
             return self.send(200, {"choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
@@ -92,7 +190,10 @@ class H(BaseHTTPRequestHandler):
                 FAIL_FIRST_LIP[0] = False
                 fail = True
             kind = "lip" if "infinitetalk" in model else ("tts" if "speech" in model else "img")
-            cost = {"img": 0.027, "tts": 0.06 * len(body.get("text", "")) / 1000, "lip": 0.075}[kind]
+            if "nano-banana" in model:
+                cost = 0.24 if body.get("resolution") == "4k" else 0.14
+            else:
+                cost = {"img": 0.027, "tts": 0.06 * len(body.get("text", "")) / 1000, "lip": 0.075}[kind]
             with LOCK:
                 BAL["ws"] -= cost
                 PRED["ws-" + pid] = {"kind": kind, "fail": fail}
@@ -140,7 +241,10 @@ class H(BaseHTTPRequestHandler):
                 return self.send(401, {"error": "bad key"})
             pid = self.path.rsplit("/", 1)[1]
             out = f"http://127.0.0.1:{PORT}/files/vid.mp4"
-            return self.send(200, {"code": 200, "data": {"id": pid, "status": "completed" if done else "processing", "outputs": [out] if done else []}})
+            data = {"id": pid, "status": "completed" if done else "processing", "outputs": [out] if done else []}
+            if done:
+                data["last_frame"] = f"http://127.0.0.1:{PORT}/files/img.jpg"
+            return self.send(200, {"code": 200, "data": data})
         self.send(404, {"error": "no route " + self.path})
 
 

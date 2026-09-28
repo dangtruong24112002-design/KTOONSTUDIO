@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KTOON · Tập thử v2</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--card2:#1d212a;--line:#2a2f3a;--text:#e8e9ec;--muted:#9aa1ad;--accent:#ff7a45;--accent2:#ffb088;--ok:#3ecf8e;--warn:#f5b942;--err:#ff6b6b;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:#3a4150}
+button.primary{background:var(--accent);border-color:var(--accent);color:#1a0d06;font-weight:600}
+button.primary:hover{background:var(--accent2)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.link{background:none;border:none;color:var(--accent2);padding:0;text-decoration:underline}
+input,select,textarea{background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:6px 9px;width:100%}
+textarea{resize:vertical;line-height:1.45;font-family:inherit}
+a{color:var(--accent2)}
+.top{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.96);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center}
+.brand{font-weight:800;letter-spacing:.04em;font-size:16px}.brand span{font-weight:400;color:var(--muted);letter-spacing:0}
+.meters{display:flex;flex-wrap:wrap;gap:8px 22px;margin-left:auto;align-items:center}
+.meter .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.meter .val{font-weight:700;font-variant-numeric:tabular-nums}.meter small{font-weight:400;color:var(--muted)}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:3px;width:130px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.bar.hot i{background:var(--err)}
+nav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line)}
+nav button{border-radius:999px;padding:5px 12px}
+nav button.on{background:var(--text);color:#111;border-color:var(--text);font-weight:600}
+main{padding:16px;max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+h2{font-size:17px;margin:0}h3{font-size:15px;margin:0}
+.hint,.muted{color:var(--muted);font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.between{justify-content:space-between}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px}
+.chip.a{border-color:#2d4a6b;color:#9cc7ff}.chip.b{border-color:#7a3b22;color:#ffb088}
+.status{font-size:12px;border-radius:6px;padding:2px 8px;display:inline-block}
+.st-running,.st-starting,.st-queued{background:#3a2a17;color:var(--warn)}.st-done{background:#15321f;color:var(--ok)}
+.st-failed,.st-stalled{background:#3a1717;color:var(--err)}.st-cancelled{background:var(--card2);color:var(--muted)}
+.err{color:var(--err);font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+.warnbox{border:1px solid #5a4516;background:#2a2112;color:#f3d38b;border-radius:10px;padding:8px 12px;font-size:13px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.tile{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.tile .head{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.tile .head b,.tile .head input{font-size:14px}
+.media{width:100%;border-radius:8px;object-fit:cover;display:block;background:#000}
+.m34{aspect-ratio:3/4}.m916{aspect-ratio:9/16}.m219{aspect-ratio:21/9}.m169{aspect-ratio:16/9}.m11{aspect-ratio:1/1}
+.ph{width:100%;aspect-ratio:16/9;border-radius:8px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:12.5px;padding:10px}
+.takes{display:flex;flex-wrap:wrap;gap:4px}
+.take{padding:2px 8px;font-size:12px;border-radius:6px}
+.take.on{border-color:var(--accent);color:var(--accent2)}
+.take.fail{color:var(--err)}.take.run{color:var(--warn)}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+details pre{white-space:pre-wrap;word-break:break-word;background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;max-height:320px;overflow:auto;margin:6px 0 0}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;font-size:13px}
+th{font-size:12px;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+.big{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.kpi{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.uprow input[type=file]{flex:2 1 160px}
+.uprow select,.uprow .up-label{flex:1 1 90px;width:auto}
+.dirty{position:sticky;top:64px;z-index:4}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:560px;width:100%;display:flex;flex-direction:column;gap:10px;max-height:85vh;overflow:auto}
+.modal ul{margin:0;padding-left:18px;max-height:260px;overflow:auto;font-size:13px}
+.toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;z-index:30;max-width:420px}
+.toast div{background:#23272f;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px}
+.toast div.bad{border-color:#6b2b2b;background:#2c1a1a}
+.offline{background:#3a1717;color:#ffd0d0;padding:8px 16px;font-size:13px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--warn);border-right-color:transparent;border-radius:50%;animation:rot .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes rot{to{transform:rotate(360deg)}}
+.qcgrid{display:grid;grid-template-columns:repeat(3,auto) 1fr;gap:8px;align-items:center}
+.chatbox{border:1px solid var(--line);border-radius:10px;padding:8px}
+.chatlog{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.chatmsg{font-size:12.5px;border-radius:8px;padding:5px 8px;background:var(--card2)}
+.chatmsg.me{background:#1d2a3a}.chatmsg.crit{background:#2a2112;color:#f3d38b}
+.badge-unapproved{border-color:#7a3b22;color:#ffb088}
+@media (max-width:760px){.meters{margin-left:0}.qcgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="offline" class="offline" hidden>Mất kết nối với app. Cửa sổ đen (app) còn mở không? Mở lại app rồi tải lại trang này.</div>
+<header class="top">
+  <div class="brand">KTOON <span>· tập thử v2</span></div>
+  <div class="meters" id="meters"></div>
+</header>
+<nav id="nav"></nav>
+<main id="view"><div class="card">Đang tải…</div></main>
+<div id="modal" class="modal" hidden><div class="box"><h3 id="mTitle"></h3><div id="mBody"></div>
+  <div class="row" style="justify-content:flex-end"><button id="mCancel">Huỷ</button><button id="mOk" class="primary">Chạy</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const TOKEN = "__TAPTHU_TOKEN__";
+const TABS = [["project","1 · Dự án"],["refs","2 · Tham chiếu"],["seq","3 · Sequences"],["prompt","4 · Prompt"],
+              ["gen","5 · Gen & QC"],["fix","6 · Sửa đoạn hỏng"],["export","7 · Xuất"],["cost","Chi phí"]];
+let S = null, tab = "project", lastSig = "", dirty = {}, fatal = false;
+const OPEN_CHATS = new Set();
+document.addEventListener("toggle", e => {
+  if (e.target.matches && e.target.matches("details.chatbox")) {
+    const key = e.target.dataset.chatkey;
+    if (e.target.open) OPEN_CHATS.add(key); else OPEN_CHATS.delete(key);
+  }
+}, true);
+try { tab = localStorage.getItem("tapthu_tab") || "project"; } catch (e) {}
+if (!TABS.some(t => t[0] === tab)) tab = "project";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const usd = (x, d) => "$" + (Number(x) || 0).toFixed(d == null ? ((Number(x) || 0) < 1 ? 3 : 2) : d);
+const trieu = x => ((Number(x) || 0) / 1e6).toLocaleString("vi-VN", {maximumFractionDigits: 1}) + " triệu đ";
+const ACTIVE = ["queued", "starting", "running"];
+const ST_VI = {queued:"chờ", starting:"bắt đầu", running:"đang chạy", done:"xong", failed:"lỗi", stalled:"quá giờ", cancelled:"đã huỷ"};
+
+async function api(path, body) {
+  const opt = {headers: {"X-Tapthu-Token": TOKEN}};
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (r.status === 403) { fatal = true; $("#offline").hidden = false; $("#offline").textContent = "Phiên cũ đã hết hiệu lực (app vừa mở lại). Tải lại trang này (F5)."; throw new Error("token"); }
+  return r.json();
+}
+async function upload(kind, params, file) {
+  const ext = "." + (file.name.split(".").pop() || "bin").toLowerCase();
+  const q = new URLSearchParams(Object.assign({kind, ext}, params));
+  const r = await fetch("/api/upload?" + q.toString(), {method: "POST", headers: {"X-Tapthu-Token": TOKEN}, body: file});
+  return r.json();
+}
+function toast(msg, bad) {
+  const d = document.createElement("div"); d.textContent = msg; if (bad) d.className = "bad";
+  $("#toast").appendChild(d); setTimeout(() => d.remove(), bad ? 9000 : 4000);
+}
+function ask(title, html, okLabel) {
+  return new Promise(res => {
+    $("#mTitle").textContent = title; $("#mBody").innerHTML = html; $("#mOk").textContent = okLabel || "Chạy";
+    $("#modal").hidden = false;
+    const done = v => { $("#modal").hidden = true; $("#mOk").onclick = $("#mCancel").onclick = null; res(v); };
+    $("#mOk").onclick = () => done(true); $("#mCancel").onclick = () => done(false);
+  });
+}
+
+// ---------- data helpers
+const jobs = (kind, target) => S.jobs.filter(j => j.kind === kind && (target == null || j.target === target));
+const jobById = id => S.jobs.find(j => j.id === id);
+const pickOf = (kind, target) => jobById(S.picks[kind + ":" + target]);
+const src = j => j ? (j.file ? "/files/" + j.file.split("/").map(encodeURIComponent).join("/") : j.url) : "";
+const active = () => S.jobs.some(j => ACTIVE.includes(j.status));
+const charName = id => (S.chars[id] || {name: id}).name;
+function statusTag(j) {
+  if (!j) return "";
+  const spin = ACTIVE.includes(j.status) ? '<span class="spin"></span>' : "";
+  return `<span class="status st-${j.status}">${spin}${ST_VI[j.status] || j.status}</span>`;
+}
+function takesRow(kind, target) {
+  const ts = jobs(kind, target), p = pickOf(kind, target);
+  if (!ts.length) return "";
+  return '<div class="takes">' + ts.map(j => {
+    const cls = j.status === "done" ? (p && p.id === j.id ? "on" : "") : (["failed", "stalled"].includes(j.status) ? "fail" : (ACTIVE.includes(j.status) ? "run" : ""));
+    const tip = j.status === "done" ? "Chọn bản này" : (j.error || ST_VI[j.status] || j.status);
+    const tlabel = j.provider === "local" ? "tải lên" : "t" + j.take;
+    return `<button class="take ${cls}" data-act="pick" data-job="${esc(j.id)}" title="${esc(tip)}">${tlabel}${j.status === "done" ? "" : " · " + (ST_VI[j.status] || j.status)}</button>`;
+  }).join("") + "</div>";
+}
+function itemBtn(stage, target, label, redo) {
+  return `<button data-act="run" data-stage="${stage}" data-target="${esc(target)}" ${redo ? 'data-redo="1"' : ""}>${esc(label)}</button>`;
+}
+function runBtn(stage, label) {
+  const t = S.todo[stage] || {n: 0, est: 0};
+  return `<button class="primary" data-act="run" data-stage="${stage}" ${t.n ? "" : "disabled"}>${esc(label)}${t.n ? " · " + t.n + " việc · ~" + usd(t.est) : " · đã đủ"}</button>`;
+}
+function uploadRow(kind, id, opts) {
+  opts = opts || {};
+  const extra = kind === "component"
+    ? `<select class="up-source"><option value="ai">AI</option><option value="real">ảnh thật</option></select>
+       <select class="up-use">${(S.component_uses || []).map(u => `<option>${u}</option>`).join("")}</select>
+       <input class="up-label" placeholder="nhãn (hair, eyes...)">`
+    : `<input class="up-label" placeholder="nhãn (tuỳ chọn)">`;
+  return `<div class="row uprow" data-kind="${kind}" data-id="${esc(id)}">
+    <input type="file" class="up-file">${extra}
+    <button data-act="do-upload">${esc(opts.label || "Tải lên")}</button></div>`;
+}
+
+// ---------- header + nav
+function renderHeader() {
+  const m = S.money, b = S.budget, pct = Math.min(100, (m.spent + m.reserved) / b * 100);
+  const runN = S.jobs.filter(j => ACTIVE.includes(j.status)).length;
+  const keys = ["wavespeed", "atlas"].map(p => `${p === "atlas" ? "Atlas" : "WaveSpeed"}: ${S.keys[p] ? "có key" : "chưa có key"}`).join(" · ");
+  $("#meters").innerHTML =
+    `<div class="meter"><div class="lbl">Đã chi</div><div class="val">${usd(m.spent, 2)} <small>/ trần ${usd(b, 2)}</small></div><div class="bar ${pct > 85 ? "hot" : ""}"><i style="width:${pct}%"></i></div></div>` +
+    `<div class="meter"><div class="lbl">Đang chạy</div><div class="val">${runN ? '<span class="spin"></span>' : ""}${runN} việc</div></div>` +
+    `<div class="meter"><span class="muted">${esc(keys)}</span></div>` +
+    `<button data-act="reload-keys">Đọc lại keys.txt</button>`;
+}
+function renderNav() {
+  $("#nav").innerHTML = TABS.map(([id, label]) => `<button data-tab="${id}" class="${tab === id ? "on" : ""}">${esc(label)}</button>`).join("");
+}
+
+// ---------- views
+const V = {};
+V.project = {
+  sig: () => [S.project, S.script, S.style, jobs("style").map(j => j.id + j.status), S.todo.style],
+  html() {
+    const js = jobs("style"), last = js[js.length - 1];
+    let status = "";
+    if (last && ACTIVE.includes(last.status)) status = `<div class="warnbox"><span class="spin"></span>GPT đang phân tích style…</div>`;
+    else if (last && last.status === "failed") status = `<div class="err">${esc(last.error)}</div>`;
+    return `<section class="card"><h2>Dự án</h2>
+      <div class="row"><label style="flex:2 1 200px">Tên dự án<input id="pname" value="${esc(S.project.name)}" data-dirty></label>
+      <label style="flex:1 1 100px">Tập số<input id="pep" type="number" min="1" value="${S.project.episode}" data-dirty></label></div>
+      <div class="row"><button class="primary" data-act="save-project">Lưu dự án</button>
+      <span class="muted">Thư mục: projects/${esc(S.project.name)}/</span></div></section>
+    <section class="card"><h2>Kịch bản</h2>
+      <p class="hint">Dán kịch bản tiếng Anh (hoặc tiếng Việt) vào đây rồi Lưu, sau đó qua tab Sequences.</p>
+      <textarea id="script" rows="14" data-dirty>${esc(S.script)}</textarea>
+      <div class="row"><button class="primary" data-act="save-script">Lưu kịch bản</button>${runBtn("style", "Phân tích style (GPT)")}</div>
+      ${S.todo.style.error ? `<div class="muted">${esc(S.todo.style.error)}</div>` : ""}${status}</section>
+    <section class="card"><h2>Style (biên tập được)</h2>
+      <textarea id="style" rows="7" data-dirty>${esc(S.style)}</textarea>
+      <div class="row"><button data-act="save-style">Lưu style</button></div></section>`;
+  }
+};
+
+function approveBadge(bank, item) {
+  if (item.approved) return "";
+  return ` <span class="chip badge-unapproved">chưa duyệt</span> <button data-act="approve" data-bank="${bank}" data-id="${item.id}">Duyệt</button>`;
+}
+function chatPanel(kind, id) {
+  const key = kind + ":" + id;
+  const hist = (S.chats[key] || []).map(t => {
+    const cls = t.role === "user" ? "me" : (t.role === "critique" ? "crit" : "bot");
+    const who = t.role === "user" ? "Bạn" : (t.role === "critique" ? "Nhận xét" : "Lệnh đã gửi (English)");
+    return `<div class="chatmsg ${cls}"><b>${who}:</b> ${esc(t.text)}</div>`;
+  }).join("");
+  const canCritique = S.llm_vision_ok !== false && !!pickOf(kind, id);
+  return `<details class="chatbox" data-chatkey="${esc(key)}" ${OPEN_CHATS.has(key) ? "open" : ""}><summary>Chat sửa ảnh (${(S.chats[key] || []).filter(t => t.role === "user").length} lần)</summary>
+    <div class="chatlog">${hist || '<div class="muted">Chưa sửa lần nào.</div>'}</div>
+    <textarea class="chat-text" rows="2" placeholder="Yêu cầu sửa (tiếng Việt hoặc tiếng Anh)…" data-dirty-skip></textarea>
+    <div class="row">
+      <select class="chat-model"><option value="bytedance/seedream-v5.0-flash/edit">Seedream (rẻ, ~$0.027)</option>
+        <option value="google/nano-banana-pro/edit">Nano Banana Pro</option>
+        <option value="openai/gpt-image-1/edit">GPT Image (giá chưa xác nhận)</option></select>
+      <select class="chat-res"><option value="2k">2K</option><option value="4k">4K</option></select>
+    </div>
+    <div class="row"><input type="file" class="chat-file" style="flex:2 1 140px">
+      <select class="chat-source" style="flex:1 1 70px"><option value="ai">ai</option><option value="real">real</option></select>
+      <select class="chat-use" style="flex:1 1 80px">${(S.component_uses || []).map(u => `<option>${u}</option>`).join("")}</select></div>
+    <div class="row"><button class="primary" data-act="chat-send" data-kind="${kind}" data-id="${id}">Gửi</button>
+      ${canCritique ? `<button data-act="chat-critique" data-kind="${kind}" data-id="${id}">Nhận xét ảnh</button>` : ""}</div>
+  </details>`;
+}
+function charCard(c) {
+  const portrait = pickOf("portrait", c.id), sheet = pickOf("sheet", c.id);
+  const comps = c.components.map(cc => `<span class="chip ${cc.source === "real" ? "b" : "a"}">${esc(cc.use)}/${esc(cc.source)} · ${esc(cc.label)}
+    <button class="link" data-act="rm-comp" data-char="${c.id}" data-comp="${esc(cc.id)}">x</button></span>`).join(" ");
+  return `<div class="tile"><div class="head"><input data-act="char-name" data-id="${c.id}" value="${esc(c.name)}" style="font-weight:700" data-dirty-skip>
+      ${approveBadge("chars", c)}</div><input data-act="char-desc" data-id="${c.id}" value="${esc(c.desc)}" placeholder="mô tả ngắn (tuổi/nét)…" data-dirty-skip>
+    <div class="chips">${comps || '<span class="muted">chưa có ảnh thành phần</span>'}</div>
+    ${uploadRow("component", c.id, {label: "Thêm ảnh thành phần"})}
+    ${portrait ? `<img class="media m34" src="${esc(src(portrait))}">` : '<div class="ph">chưa có ảnh nhân vật</div>'}
+    <div class="row">${itemBtn("portrait", c.id, portrait ? "Tạo lại ảnh" : "Tạo ảnh nhân vật", !!portrait)}</div>
+    ${uploadRow("portrait", c.id, {label: "Tải ảnh có sẵn"})}${takesRow("portrait", c.id)}
+    ${portrait ? chatPanel("portrait", c.id) : ""}
+    ${sheet ? `<img class="media m219" src="${esc(src(sheet))}">` : '<div class="ph">chưa có sheet 21:9</div>'}
+    <div class="row">${itemBtn("sheet", c.id, sheet ? "Tạo lại sheet" : "Tạo sheet 21:9", !!sheet)}</div>
+    ${uploadRow("sheet", c.id, {label: "Tải sheet có sẵn"})}${takesRow("sheet", c.id)}
+    ${sheet ? chatPanel("sheet", c.id) : ""}</div>`;
+}
+function envCard(e) {
+  const wide = pickOf("env_wide", e.id), rev = pickOf("env_rev", e.id);
+  return `<div class="tile"><div class="head"><b>${esc(e.name)}</b>
+      <select data-act="env-tag" data-id="${e.id}"><option ${e.tag === "INT" ? "selected" : ""}>INT</option><option ${e.tag === "EXT" ? "selected" : ""}>EXT</option></select>
+      <select data-act="env-time" data-id="${e.id}"><option value="day" ${e.time !== "night" ? "selected" : ""}>ngày</option><option value="night" ${e.time === "night" ? "selected" : ""}>đêm</option></select>
+      ${approveBadge("envs", e)}</div>
+    <textarea data-act="env-text" data-id="${e.id}" rows="2" placeholder="mô tả bối cảnh (tiếng Anh)…" data-dirty-skip>${esc(e.text)}</textarea>
+    ${wide ? `<img class="media m169" src="${esc(src(wide))}">` : '<div class="ph">chưa có ảnh wide</div>'}
+    <div class="row">${itemBtn("env_wide", e.id, wide ? "Tạo lại" : "Tạo ảnh wide", !!wide)}</div>${uploadRow("env_wide", e.id)}${takesRow("env_wide", e.id)}
+    ${wide ? chatPanel("env_wide", e.id) : ""}
+    ${rev ? `<img class="media m169" src="${esc(src(rev))}">` : ""}
+    <div class="row">${itemBtn("env_rev", e.id, "Tạo góc ngược (tuỳ chọn)", !!rev)}</div>${uploadRow("env_rev", e.id)}${takesRow("env_rev", e.id)}
+    ${rev ? chatPanel("env_rev", e.id) : ""}</div>`;
+}
+function propCard(p) {
+  const img = pickOf("prop", p.id);
+  return `<div class="tile"><div class="head"><b>${esc(p.name)}</b>${approveBadge("props", p)}</div>
+    ${img ? `<img class="media m11" src="${esc(src(img))}">` : '<div class="ph">chưa có ảnh</div>'}
+    <div class="row">${itemBtn("prop", p.id, img ? "Tạo lại" : "Tạo ảnh", !!img)}</div>${uploadRow("prop", p.id)}${takesRow("prop", p.id)}
+    ${img ? chatPanel("prop", p.id) : ""}</div>`;
+}
+function voiceCard(v) {
+  const j = pickOf("voice", v.id);
+  const warn = j && j.dur != null && j.dur > 6 ? `<div class="warnbox">Dài ${j.dur}s — nên cắt còn 2–6s để làm mẫu giọng.</div>` : "";
+  return `<div class="tile"><div class="head"><b>${esc(v.name)}</b><span class="muted">${v.char ? esc(charName(v.char)) : ""}</span></div>
+    ${j ? `<audio src="${esc(src(j))}" controls style="width:100%"></audio><div class="muted">${j.dur != null ? j.dur + "s" : ""}</div>` : '<div class="muted">chưa có file</div>'}
+    ${warn}${uploadRow("voice", v.id, {label: "Tải giọng (wav/mp3, 2–15s)"})}${takesRow("voice", v.id)}</div>`;
+}
+function refCard(r) {
+  const j = pickOf("video_ref", r.id);
+  return `<div class="tile"><div class="head"><b>${esc(r.name)}</b></div>
+    ${j ? `<video class="media m169" src="${esc(src(j))}" controls preload="metadata"></video>` : '<div class="ph">chưa có clip</div>'}
+    ${uploadRow("video_ref", r.id, {label: "Tải clip (chỉ dùng làm tham chiếu chuyển động)"})}${takesRow("video_ref", r.id)}</div>`;
+}
+V.refs = {
+  sig: () => [S.chars, S.envs, S.props, S.voices, S.video_refs, S.chats, S.llm_vision_ok,
+              S.jobs.filter(j => ["portrait","sheet","env_wide","env_rev","prop","voice","video_ref","preprod"].includes(j.kind)).map(j => j.id + j.status + j.file), S.picks, S.todo.preprod, S.todo.refs_all],
+  html() {
+    const chars = Object.values(S.chars), envs = Object.values(S.envs), props = Object.values(S.props),
+          voices = Object.values(S.voices), refs = Object.values(S.video_refs);
+    const pj = jobs("preprod"), pjl = pj[pj.length - 1];
+    return `<section class="card"><div class="row between"><h2>Danh sách tiền kỳ</h2>
+        <div class="row">${runBtn("preprod", "Đề xuất danh sách (GPT)")}<button class="primary" data-act="run" data-stage="refs_all">Tạo ảnh tham chiếu còn thiếu</button></div></div>
+        <p class="hint">GPT đọc kịch bản + shot list, đề xuất nhân vật/bối cảnh/prop (chưa duyệt). Duyệt từng mục rồi bấm "Tạo ảnh tham chiếu còn thiếu" để chạy 1 lần cho tất cả.</p>
+        ${pjl && ACTIVE.includes(pjl.status) ? '<div class="warnbox"><span class="spin"></span>Đang đề xuất…</div>' : ""}
+        ${pjl && pjl.status === "failed" ? `<div class="err">${esc(pjl.error)}</div>` : ""}</section>
+      <section class="card"><div class="row between"><h2>Nhân vật</h2>
+        <div class="row"><input id="newCharName" placeholder="tên nhân vật mới" style="width:180px"><button data-act="new-char">+ Nhân vật</button></div></div>
+        <p class="hint">Tải ảnh thành phần (mặt/tóc/thân/đồ...) rồi bấm Tạo ảnh nhân vật. Mặt/mắt chỉ nhận ảnh AI (source=ai) — hard rule.</p></section>
+      <div class="grid">${chars.map(charCard).join("") || '<p class="muted">Chưa có nhân vật.</p>'}</div>
+      <section class="card"><div class="row between"><h2>Bối cảnh</h2>
+        <div class="row"><input id="newEnvName" placeholder="tên bối cảnh mới" style="width:180px"><button data-act="new-env">+ Bối cảnh</button></div></div></section>
+      <div class="grid">${envs.map(envCard).join("") || '<p class="muted">Chưa có bối cảnh.</p>'}</div>
+      <section class="card"><div class="row between"><h2>Prop</h2>
+        <div class="row"><input id="newPropName" placeholder="tên prop mới" style="width:180px"><button data-act="new-prop">+ Prop</button></div></div></section>
+      <div class="grid">${props.map(propCard).join("") || '<p class="muted">Chưa có prop.</p>'}</div>
+      <section class="card"><div class="row between"><h2>Giọng (tham chiếu âm sắc)</h2>
+        <div class="row"><input id="newVoiceName" placeholder="tên" style="width:120px">
+        <select id="newVoiceChar"><option value="">— không gắn nhân vật —</option>${chars.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select>
+        <button data-act="new-voice">+ Giọng</button></div></div></section>
+      <div class="grid">${voices.map(voiceCard).join("") || '<p class="muted">Chưa có giọng.</p>'}</div>
+      <section class="card"><div class="row between"><h2>Video ref (tham chiếu chuyển động)</h2>
+        <div class="row"><input id="newRefName" placeholder="tên" style="width:180px"><button data-act="new-ref">+ Video ref</button></div></div></section>
+      <div class="grid">${refs.map(refCard).join("") || '<p class="muted">Chưa có video ref.</p>'}</div>`;
+  }
+};
+
+function storyboardCard(sh) {
+  const img = pickOf("storyboard", sh.id);
+  return `<div class="tile"><div class="head"><b>${esc(sh.id)}</b><span class="muted">${sh.duration}s · ${esc(sh.location)}</span></div>
+    <div class="muted">${esc(sh.desc)}${sh.line ? ` · 🗨 ${esc(sh.speaker)}: "${esc(sh.line)}"` : ""}</div>
+    <label class="row" style="width:auto"><input type="checkbox" style="width:auto" data-act="storyboard-toggle" data-id="${sh.id}" ${sh.storyboard_on ? "checked" : ""}> Bật storyboard cho shot này</label>
+    ${sh.storyboard_on ? (img ? `<img class="media m916" src="${esc(src(img))}">` : '<div class="ph">chưa có storyboard</div>') : ""}
+    ${sh.storyboard_on ? `<div class="row">${itemBtn("storyboard", sh.id, img ? "Tạo lại" : "Tạo storyboard", !!img)}</div>${takesRow("storyboard", sh.id)}` : ""}
+    ${sh.storyboard_on && img ? chatPanel("storyboard", sh.id) : ""}</div>`;
+}
+V.seq = {
+  sig: () => [S.seq_v, S.seq, S.shots_v, S.shots, S.shots_raw, jobs("shots").map(j => j.id + j.status),
+              jobs("seq").map(j => j.id + j.status), S.todo.shots, S.todo.seq, S.chats, S.llm_vision_ok, S.picks],
+  html() {
+    const sj = jobs("shots"), sjl = sj[sj.length - 1];
+    const qj = jobs("seq"), qjl = qj[qj.length - 1];
+    const tags = {S1: "hook", S2: "normal/key", S3: "cliffhanger"};
+    let shotsStatus = "", seqStatus = "";
+    if (sjl && ACTIVE.includes(sjl.status)) shotsStatus = `<div class="warnbox"><span class="spin"></span>Đang chuẩn hoá/tạo shot list…</div>`;
+    else if (sjl && sjl.status === "failed") shotsStatus = `<div class="err">${esc(sjl.error)}</div>`;
+    if (qjl && ACTIVE.includes(qjl.status)) seqStatus = `<div class="warnbox"><span class="spin"></span>Đang chia sequences…</div>`;
+    else if (qjl && qjl.status === "failed") seqStatus = `<div class="err">${esc(qjl.error)}</div>`;
+    return `<section class="card"><h2>1. Shot list</h2>
+      <p class="hint">Dán shot list có sẵn (chữ hoặc bảng copy từ Excel/Docs) vào đây — GPT giữ nguyên số shot, chỉ chuẩn hoá định dạng.
+      Để trống thì GPT tự viết shot list từ kịch bản.</p>
+      <textarea id="shotsRaw" rows="6" placeholder="Dán shot list ở đây (không bắt buộc)…" data-dirty>${esc(S.shots_raw)}</textarea>
+      <div class="row"><button data-act="save-shots-raw">Lưu shot list dán vào</button>${runBtn("shots", S.shots.length ? "Chuẩn hoá/Tạo lại shot list (GPT)" : "Chuẩn hoá/Tạo shot list (GPT)")}</div>
+      ${S.todo.shots.error ? `<div class="muted">${esc(S.todo.shots.error)}</div>` : ""}${shotsStatus}
+      ${S.shots.length ? `<div class="chips">${S.shots.map(sh => `<span class="chip">${esc(sh.id)} ${sh.duration}s</span>`).join("")}</div>` : ""}</section>
+      ${S.shots.length ? `<div class="grid">${S.shots.map(storyboardCard).join("")}</div>` : ""}
+      <section class="card"><div class="row between"><h2>2. Sequences</h2>${runBtn("seq", S.seq_v ? "Chia lại (LLM)" : "Chia sequences (LLM)")}</div>
+      <p class="hint">S1 = hook (0–30s, Seedance 2.5) · S2 = 30–60s, chia 2 phần 15s (Seedance 2.0, hoặc 2.5 nếu tag "key") · S3 = cliffhanger (60–90s, Seedance 2.5).
+      GPT gom các shot ở trên vào 3 sequence, không tự viết beat mới. Sửa trực tiếp JSON dưới đây rồi Lưu nếu cần (chỉ dùng "beats"/"lines" tay khi không có shot list).</p>
+      ${S.todo.seq.error ? `<div class="muted">${esc(S.todo.seq.error)}</div>` : ""}${seqStatus}
+      <div class="row">${["S1", "S2", "S3"].map(k => S.seq[k] ? `<label class="row" style="width:auto"><input type="checkbox" style="width:auto" data-act="seq-storyboards" data-id="${k}" ${S.seq[k].use_storyboards ? "checked" : ""}> ${k} dùng storyboard làm @Image</label>` : "").join("")}</div>
+      <textarea id="seqjson" rows="20" data-dirty>${esc(JSON.stringify(S.seq, null, 1))}</textarea>
+      <div class="row"><button class="primary" data-act="save-seq">Lưu sequences</button>
+      ${["S1","S2","S3"].map(k => S.seq[k] ? `<span class="chip">${k} · ${esc(S.seq[k].tag)} (${tags[k]})</span>` : "").join("")}</div></section>`;
+  }
+};
+
+V.prompt = {
+  sig: () => [S.prompts, S.seq_v, jobs("prompt").map(j => j.id + j.status), jobs("review").map(j => j.id + j.status), S.mapping],
+  html() {
+    if (!S.seq_v) return `<section class="card"><h2>Prompt</h2><p class="muted">Chưa có sequences (bước 3).</p></section>`;
+    return S.gens.map(g => {
+      const seqk = S.seq_of[g], seq = S.seq[seqk] || {};
+      const p = S.prompts[g] || {};
+      const pj = jobs("prompt", g), pjl = pj[pj.length - 1];
+      const rj = jobs("review", g), rjl = rj[rj.length - 1];
+      const review = p.review;
+      return `<section class="card"><div class="row between"><h2>${g} <span class="muted">· ${seqk} · ${esc(seq.tag || "")} · ${S.duration[g]}s</span></h2>
+        <div class="row">${itemBtn("prompt", g, p.text ? "Tạo lại prompt (GPT)" : "Tạo prompt (GPT)", !!p.text)}${itemBtn("review", g, "Duyệt bằng Gemini")}</div></div>
+        <details><summary>Tham chiếu sẽ dùng (@Image/@Audio/@Video)</summary><pre>${esc(S.mapping[g] || "")}</pre></details>
+        ${pjl && ACTIVE.includes(pjl.status) ? '<div class="warnbox"><span class="spin"></span>Đang viết prompt…</div>' : ""}
+        ${pjl && pjl.status === "failed" ? `<div class="err">${esc(pjl.error)}</div>` : ""}
+        <textarea data-act="prompt-text" data-id="${g}" rows="10" data-dirty-skip>${esc(p.text || "")}</textarea>
+        <div class="row"><button data-act="save-prompt" data-id="${g}">Lưu prompt</button>
+          <label class="row" style="width:auto"><input type="checkbox" style="width:auto" data-act="approve-prompt" data-id="${g}" ${p.approved ? "checked" : ""}> Đã duyệt (owner)</label></div>
+        ${rjl && ACTIVE.includes(rjl.status) ? '<div class="warnbox"><span class="spin"></span>Gemini đang duyệt…</div>' : ""}
+        ${review ? `<div class="${review.pass ? "hint" : "err"}">Gemini: ${review.pass ? "Đạt" : "Chưa đạt"}${review.notes ? " — " + esc(review.notes) : ""}</div>` : ""}
+        </section>`;
+    }).join("");
+  }
+};
+
+V.gen = {
+  sig: () => [S.gens.map(g => [S.settings["video_" + g], S.settings["price_" + g], jobs("gen", g).map(j => j.id + j.status + j.file), S.qc[g]]), S.prompts, S.settings.max_full_gens],
+  html() {
+    return S.gens.map(g => {
+      const j = pickOf("gen", g), ts = jobs("gen", g), maxN = Number(S.settings.max_full_gens) || 2;
+      const liveN = ts.filter(x => !["failed", "cancelled"].includes(x.status)).length;
+      const approved = S.prompts[g] && S.prompts[g].approved;
+      const q = S.qc[g] || {};
+      const measured = ts.find(x => x.measured);
+      const blockedS2b = g === "S2b" && !(pickOf("gen", "S2a") && pickOf("gen", "S2a").last_frame);
+      return `<section class="card"><div class="row between"><h2>${g}</h2>
+          <span class="muted">${liveN}/${maxN} lần tạo đầy đủ${measured && measured.measured.per_unit != null ? " · đo giá thật " + usd(measured.measured.per_unit, 4) + "/s" : ""}</span></div>
+        <div class="row"><label style="width:auto">Model
+          <select data-act="gen-model" data-id="${g}"><option value="bytedance/seedance-2.5/reference-to-video" ${(S.settings["video_" + g] || "").includes("2.5") ? "selected" : ""}>Seedance 2.5</option>
+          <option value="bytedance/seedance-2.0/reference-to-video" ${(S.settings["video_" + g] || "").includes("2.0") ? "selected" : ""}>Seedance 2.0</option></select></label>
+          <span class="muted">giá ước tính ${usd(S.settings["price_" + g], 4)}/s</span></div>
+        ${!approved ? `<div class="warnbox">Prompt của ${g} chưa được duyệt (tab Prompt).</div>` : ""}
+        ${blockedS2b ? `<div class="warnbox">Chờ S2a xong (cần khung hình cuối) trước khi tạo S2b.</div>` : ""}
+        ${j ? `<video class="media m916" style="max-width:280px" src="${esc(src(j))}" controls preload="metadata"></video>` : '<div class="ph">chưa có video</div>'}
+        ${takesRow("gen", g)}
+        <div class="row">${itemBtn("gen", g, liveN ? "Tạo lại (đầy đủ)" : "Tạo video", liveN > 0)}${liveN >= maxN ? '<span class="muted">đã đủ lượt — dùng Sửa đoạn hỏng</span>' : ""}</div>
+        <div class="qcgrid">
+          <label><input type="checkbox" data-act="qc" data-id="${g}" data-f="sharp" ${q.sharp ? "checked" : ""}> Nét, đúng nhân vật</label>
+          <label><input type="checkbox" data-act="qc" data-id="${g}" data-f="raccord" ${q.raccord ? "checked" : ""}> Raccord đúng</label>
+          <label><input type="checkbox" data-act="qc" data-id="${g}" data-f="voice" ${q.voice ? "checked" : ""}> Giọng/khẩu hình hợp</label>
+          <input placeholder="ghi chú QC" data-act="qc-note" data-id="${g}" value="${esc(q.note || "")}" data-dirty-skip></div>
+        <div class="row"><button data-act="qc-result" data-id="${g}" data-v="pass" class="${q.result === "pass" ? "primary" : ""}">Pass</button>
+          <button data-act="qc-result" data-id="${g}" data-v="fail" class="${q.result === "fail" ? "primary" : ""}">Fail</button></div>
+        </section>`;
+    }).join("");
+  }
+};
+
+V.fix = {
+  sig: () => [S.fixes, S.jobs.filter(j => ["frame","fix_img","patch"].includes(j.kind)).map(j => j.id + j.status + j.file)],
+  html() {
+    const fixes = Object.values(S.fixes);
+    return `<section class="card"><h2>Sửa đoạn hỏng</h2>
+      <p class="hint">Chọn generation và khoảng giây (4–10s) bị lỗi để cắt khung hình, sửa ảnh rồi vá lại đúng đoạn đó (cần ffmpeg).</p>
+      <div class="row"><select id="fixGen">${S.gens.map(g => `<option>${g}</option>`).join("")}</select>
+        <input id="fixStart" type="number" min="0" placeholder="giây bắt đầu" style="width:120px">
+        <input id="fixEnd" type="number" min="4" placeholder="giây kết thúc" style="width:120px">
+        <button data-act="new-fix">Cắt khung hình</button></div>
+      ${S.ffmpeg ? "" : '<div class="warnbox">Máy chưa có ffmpeg — cài rồi mở lại app (winget install Gyan.FFmpeg / brew install ffmpeg).</div>'}</section>
+      ${fixes.map(f => {
+        const frame = pickOf("frame", f.id), fimg = pickOf("fix_img", f.id), patch = pickOf("patch", f.id);
+        return `<section class="card"><h3>${esc(f.id)} · ${esc(f.gen)} · ${f.start}-${f.end}s</h3>
+          <div class="row" style="align-items:flex-start">
+            <div style="flex:1 1 200px">${frame ? `<img class="media m916" src="${esc(src(frame))}">` : '<div class="ph">chưa có khung hình</div>'}<div class="muted">Khung hình gốc</div></div>
+            <div style="flex:1 1 200px">${fimg ? `<img class="media m916" src="${esc(src(fimg))}">` : '<div class="ph">chưa có ảnh sửa</div>'}<div class="muted">Ảnh đã sửa</div>${takesRow("fix_img", f.id)}</div>
+            <div style="flex:1 1 200px">${patch ? `<video class="media m916" src="${esc(src(patch))}" controls preload="metadata"></video>` : '<div class="ph">chưa có clip vá</div>'}<div class="muted">Clip vá</div>${takesRow("patch", f.id)}</div>
+          </div>
+          <textarea data-act="fix-prompt" data-id="${f.id}" rows="2" placeholder="mô tả cần sửa (tiếng Anh)…" data-dirty-skip>${esc(f.prompt || "")}</textarea>
+          <div class="row"><button data-act="save-fix-prompt" data-id="${f.id}">Lưu mô tả sửa</button>
+            ${itemBtn("fix_img", f.id, fimg ? "Tạo lại ảnh sửa" : "Tạo ảnh sửa", !!fimg)}
+            ${itemBtn("patch", f.id, patch ? "Vá lại" : "Vá đoạn này", !!patch)}</div></section>`;
+      }).join("") || '<p class="muted">Chưa có fix nào.</p>'}`;
+  }
+};
+
+V.export = {
+  sig: () => [S.export],
+  html() {
+    const ex = S.export || {};
+    return `<section class="card"><h2>Xuất</h2>
+      <p class="hint">Copy các clip đã chọn (gen + patch) vào export/EP&lt;nn&gt;/ theo thứ tự, kèm danh_sach.txt.</p>
+      <div class="row"><button class="primary" data-act="export">Xuất</button>${ex.status === "running" ? '<span class="muted"><span class="spin"></span>đang xuất…</span>' : ""}</div>
+      ${ex.status === "done" ? `<div class="chips"><span class="chip">${ex.n} file</span>${ex.joined ? `<span class="chip">đã ghép: ${esc(ex.joined)}</span>` : '<span class="muted">chưa ghép 1 file (thiếu ffmpeg hoặc thiếu clip)</span>'}</div>
+        <ul>${(ex.files || []).map(f => `<li><a href="/files/${esc(ex.dir)}/${encodeURIComponent(f)}" target="_blank">${esc(f)}</a></li>`).join("")}</ul>
+        <p><a href="/files/${esc(ex.dir)}/danh_sach.txt" target="_blank">danh_sach.txt</a>${ex.joined ? ` · <a href="/files/${esc(ex.dir)}/${encodeURIComponent(ex.joined)}" target="_blank">${esc(ex.joined)}</a>` : ""}</p>` : ""}
+      ${ex.status === "failed" ? `<div class="err">${esc(ex.error)}</div>` : ""}</section>`;
+  }
+};
+
+V.cost = {
+  sig: () => [S.cost, S.by_stage, S.balance, S.jobs.filter(j => j.measured).map(j => j.id)],
+  html() {
+    const c = S.cost;
+    const order = ["style","shots","seq","preprod","portrait","sheet","env_wide","env_rev","prop","storyboard","prompt","review","gen","fix_img","patch","critique"];
+    const rows = order.filter(k => S.by_stage[k]).map(k => { const b = S.by_stage[k];
+      return `<tr><td>${esc(S.stage_names[k] || k)}</td><td class="num">${b.done}</td><td class="num">${b.failed}</td><td class="num">${b.active}</td><td class="num">${usd(b.spent, 3)}</td></tr>`; }).join("");
+    const bal = ["wavespeed", "atlas"].map(p => { const b = S.balance[p] || {}; const name = p === "atlas" ? "Atlas Cloud" : "WaveSpeed";
+      return `<tr><td>${name}${S.keys[p] ? "" : ' <span class="muted">(chưa có key)</span>'}</td><td class="num">${b.start != null ? usd(b.start, 2) : "—"}</td><td class="num">${b.now != null ? usd(b.now, 2) : "—"}</td><td class="num">${b.start != null && b.now != null ? usd(b.start - b.now, 3) : "—"}</td></tr>`; }).join("");
+    const measured = S.jobs.filter(j => j.measured);
+    return `<section class="card"><h2>Chi phí tập này</h2><div class="kpis">
+        <div class="kpi"><div class="muted">Đã chi</div><div class="big">${usd(c.spent, 2)}</div></div>
+        <div class="kpi"><div class="muted">Thực chi (số dư giảm)</div><div class="big">${c.real != null ? usd(c.real, 2) : "—"}</div></div>
+        <div class="kpi"><div class="muted">×60 tập, quy VND</div><div class="big">${trieu(c.projection_vnd)}</div><div class="muted">mục tiêu ≤ 30 triệu, hợp đồng 50 triệu</div></div>
+        <div class="kpi"><div class="muted">Trần chi lần thử này</div><div class="big">${usd(c.cap_usd, 2)}</div></div></div>
+      <div class="kpis">
+        <div class="kpi"><div class="muted">Làm 1 lần cho cả series (nhân vật/bối cảnh/prop)</div><div class="big">${usd(c.series_spent, 3)}</div></div>
+        <div class="kpi"><div class="muted">Lặp lại mỗi tập (shot/prompt/storyboard/video)</div><div class="big">${usd(c.episode_spent, 3)}</div></div>
+      </div></section>
+      <section class="card"><h3>Theo bước</h3><div class="tablewrap"><table><tr><th>Bước</th><th class="num">Xong</th><th class="num">Lỗi/huỷ</th><th class="num">Đang chạy</th><th class="num">Chi USD</th></tr>${rows || '<tr><td colspan="5" class="muted">Chưa chi gì.</td></tr>'}</table></div>
+        <p class="hint">Chi tiết từng lần gọi: <a href="/files/output/so_chi.csv" target="_blank">so_chi.csv</a> · nhật ký: <a href="/files/output/nhat_ky.txt" target="_blank">nhat_ky.txt</a></p></section>
+      <section class="card"><div class="row between"><h3>Số dư tài khoản</h3><div class="row"><button data-act="balance">Cập nhật số dư</button><button data-act="balance-reset">Đặt lại mốc</button></div></div>
+        <div class="tablewrap"><table><tr><th>Nhà cung cấp</th><th class="num">Lúc bắt đầu</th><th class="num">Hiện tại</th><th class="num">Đã giảm</th></tr>${bal}</table></div></section>
+      ${measured.length ? `<section class="card"><h3>Giá đo thật</h3><div class="tablewrap"><table><tr><th>Việc</th><th>Model</th><th class="num">Giây</th><th class="num">Niêm yết/s</th><th class="num">Đo được/s</th></tr>${measured.map(j => `<tr><td>${esc(j.id)}</td><td>${esc(j.model)}</td><td class="num">${j.units}</td><td class="num">${usd(j.unit_price, 4)}</td><td class="num">${j.measured.per_unit != null ? usd(j.measured.per_unit, 4) : "—"}</td></tr>`).join("")}</table></div></section>` : ""}`;
+  }
+};
+
+// ---------- render
+function anyPlaying() { return [...document.querySelectorAll("#view video, #view audio")].some(m => !m.paused && !m.ended); }
+function anyFocused() { const a = document.activeElement; return a && ["TEXTAREA", "INPUT", "SELECT"].includes(a.tagName) && $("#view").contains(a); }
+function renderView(force) {
+  const view = V[tab];
+  const sig = tab + "|" + JSON.stringify(view.sig());
+  if (!force && sig === lastSig) return;
+  if (!force && (dirty[tab] || anyPlaying() || anyFocused())) { showDirty(); return; }
+  lastSig = sig;
+  $("#view").innerHTML = (dirty[tab] ? dirtyBar() : "") + view.html();
+}
+function dirtyBar() { return `<div class="warnbox dirty row between" id="dirtybar"><span>Có thay đổi/đang gõ trên trang này — tạm không tự làm mới.</span><button data-act="discard">Làm mới trang</button></div>`; }
+function showDirty() { if (!$("#dirtybar") && (dirty[tab] || anyFocused())) $("#view").insertAdjacentHTML("afterbegin", dirtyBar()); }
+function renderAll(force) { if (!S) return; renderHeader(); renderNav(); renderView(force); }
+
+async function refresh(force) {
+  if (fatal) return;
+  try { S = await api("/api/state"); $("#offline").hidden = true; }
+  catch (e) { if (!fatal) $("#offline").hidden = false; return; }
+  renderAll(force);
+}
+async function loop() { await refresh(); setTimeout(loop, S && active() ? 1500 : 4000); }
+
+// ---------- actions
+async function runStage(stage, target, redo) {
+  const dry = await api("/api/run", {stage, target: target || null, redo: !!redo, dry: true});
+  if (dry.error) return toast(dry.error, true);
+  if (!dry.n) return toast("Không có việc nào cần làm.");
+  const ok = await ask(`Chạy ${dry.n} việc · ước tính ~${usd(dry.est)}`,
+    `<ul>${dry.items.map(x => `<li>${esc(x)}</li>`).join("")}</ul><p class="muted">Đã chi ~${usd(S.money.spent, 2)} · trần ${usd(S.budget, 2)}. Tiền thật sẽ bị trừ khi gửi.</p>`, "Chạy");
+  if (!ok) return;
+  const r = await api("/api/run", {stage, target: target || null, redo: !!redo});
+  if (r.error) return toast(r.error, true);
+  toast(`Đã xếp hàng ${r.n} việc (~${usd(r.est)})`);
+  await refresh(true);
+}
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-tab],[data-act]");
+  if (!t || t.disabled) return;
+  if (t.dataset.tab) {
+    tab = t.dataset.tab; try { localStorage.setItem("tapthu_tab", tab); } catch (err) {}
+    dirty[tab] = false; window.scrollTo(0, 0); renderAll(true); return;
+  }
+  const d = t.dataset;
+  try {
+    switch (d.act) {
+      case "run": await runStage(d.stage, d.target, d.redo === "1"); break;
+      case "pick": { const j = jobById(d.job); if (!j || j.status !== "done") { if (j && j.error) toast(j.error, j.status !== "cancelled"); break; } const r = await api("/api/pick", {job: d.job}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "reload-keys": { const r = await api("/api/reload_keys", {}); toast(`WaveSpeed: ${r.keys.wavespeed ? "có key" : "chưa có"} · Atlas: ${r.keys.atlas ? "có key" : "chưa có"} · trần ${usd(r.budget, 2)}`); setTimeout(() => refresh(true), 1500); break; }
+      case "balance": case "balance-reset": { await api("/api/balance", {reset_start: d.act === "balance-reset"}); toast("Đã cập nhật số dư"); await refresh(true); break; }
+      case "discard": dirty[tab] = false; await refresh(true); break;
+      case "save-project": { const r = await api("/api/project", {name: $("#pname").value, episode: Number($("#pep").value) || 1}); dirty.project = false; if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(true); break; }
+      case "save-script": { const r = await api("/api/script", {text: $("#script").value}); dirty.project = false; if (r.error) toast(r.error, true); else toast("Đã lưu kịch bản"); await refresh(true); break; }
+      case "save-style": { const r = await api("/api/style", {text: $("#style").value}); dirty.project = false; if (r.error) toast(r.error, true); else toast("Đã lưu style"); await refresh(true); break; }
+      case "save-seq": { let seq; try { seq = JSON.parse($("#seqjson").value); } catch (err) { toast("JSON lỗi: " + err.message, true); break; } const r = await api("/api/seq", {seq}); dirty.seq = false; if (r.error) toast(r.error, true); else toast("Đã lưu sequences"); await refresh(true); break; }
+      case "new-char": { const name = $("#newCharName").value.trim(); if (!name) break; await api("/api/char/new", {name}); await refresh(true); break; }
+      case "new-env": { const name = $("#newEnvName").value.trim(); if (!name) break; await api("/api/env/new", {name}); await refresh(true); break; }
+      case "new-prop": { const name = $("#newPropName").value.trim(); if (!name) break; await api("/api/prop/new", {name}); await refresh(true); break; }
+      case "new-voice": { const name = $("#newVoiceName").value.trim(); if (!name) break; await api("/api/voice/new", {name, char: $("#newVoiceChar").value}); await refresh(true); break; }
+      case "new-ref": { const name = $("#newRefName").value.trim(); if (!name) break; await api("/api/videoref/new", {name}); await refresh(true); break; }
+      case "rm-comp": { await api("/api/component/remove", {char: d.char, comp: d.comp}); await refresh(true); break; }
+      case "do-upload": { const row = t.closest(".uprow"); const file = row.querySelector(".up-file").files[0]; if (!file) { toast("Chọn file trước", true); break; }
+        const label = (row.querySelector(".up-label") || {}).value || "";
+        const params = row.dataset.kind === "component" ? {char: row.dataset.id, label, source: row.querySelector(".up-source").value, use: row.querySelector(".up-use").value} : {target: row.dataset.id, label};
+        const r = await upload(row.dataset.kind, params, file); if (r.error) toast(r.error, true); else toast("Đã tải lên"); await refresh(true); break; }
+      case "save-prompt": { const ta = document.querySelector(`textarea[data-act="prompt-text"][data-id="${d.id}"]`); const r = await api("/api/prompt", {gen: d.id, text: ta.value}); if (r.error) toast(r.error, true); else toast("Đã lưu prompt"); await refresh(true); break; }
+      case "save-fix-prompt": { const ta = document.querySelector(`textarea[data-act="fix-prompt"][data-id="${d.id}"]`); const r = await api("/api/fix/prompt", {id: d.id, text: ta.value}); if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(true); break; }
+      case "new-fix": { const gen = $("#fixGen").value, start = Number($("#fixStart").value) || 0, end = Number($("#fixEnd").value) || (start + 4);
+        const r = await api("/api/fix/new", {gen, start, end}); if (r.error) toast(r.error, true); else toast("Đã cắt khung hình"); await refresh(true); break; }
+      case "export": { const r = await api("/api/export", {}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "qc-result": { const cur = (S.qc[d.id] || {}).result; const r = await api("/api/qc", {gen: d.id, result: cur === d.v ? null : d.v}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "save-shots-raw": { const r = await api("/api/shots", {text: $("#shotsRaw").value}); dirty.seq = false; if (r.error) toast(r.error, true); else toast("Đã lưu shot list dán vào"); await refresh(true); break; }
+      case "approve": { const r = await api("/api/approve", {bank: d.bank, id: d.id, approved: true}); if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "chat-send": { const box = t.closest("details.chatbox"); const text = box.querySelector(".chat-text").value;
+        if (!text.trim()) { toast("Chưa gõ yêu cầu sửa", true); break; }
+        const model = box.querySelector(".chat-model").value, resolution = box.querySelector(".chat-res").value;
+        const file = box.querySelector(".chat-file").files[0];
+        let attachments = [];
+        if (file) {
+          const ru = await upload("chat_attach", {label: "attach", source: box.querySelector(".chat-source").value, use: box.querySelector(".chat-use").value}, file);
+          if (ru.error) { toast(ru.error, true); break; }
+          attachments = [ru.job];
+        }
+        const dry = await api("/api/chat", {kind: d.kind, target: d.id, text, model, resolution, dry: true});
+        if (dry.error) { toast(dry.error, true); break; }
+        const ok = await ask(`Sửa ảnh · ước tính ~${usd(dry.est)}`, `<p class="muted">${esc(dry.items[0])}</p>`, "Gửi");
+        if (!ok) break;
+        const r = await api("/api/chat", {kind: d.kind, target: d.id, text, model, resolution, attachments});
+        if (r.error) toast(r.error, true); else { toast("Đã gửi yêu cầu sửa"); box.querySelector(".chat-text").value = ""; }
+        await refresh(true); break; }
+      case "chat-critique": { const target = d.kind + ":" + d.id;
+        const dry = await api("/api/run", {stage: "critique", target, dry: true});
+        if (dry.error) { toast(dry.error, true); break; }
+        const ok = await ask(`Nhận xét ảnh · ước tính ~${usd(dry.est)}`, "<p class=\"muted\">Không tốn tiền sửa ảnh, chỉ tốn tiền LLM xem ảnh.</p>", "Xem");
+        if (!ok) break;
+        const r = await api("/api/run", {stage: "critique", target});
+        if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "storyboard-toggle": { const r = await api("/api/shot/storyboard", {id: d.id, on: !S.shots.find(x => x.id === d.id).storyboard_on});
+        if (r.error) toast(r.error, true); await refresh(true); break; }
+      case "seq-storyboards": { const r = await api("/api/seq/storyboards", {seqk: d.id, on: !S.seq[d.id].use_storyboards});
+        if (r.error) toast(r.error, true); await refresh(true); break; }
+    }
+  } catch (err) { if (err.message !== "token") toast("Lỗi: " + err.message, true); }
+});
+document.addEventListener("change", async e => {
+  const el = e.target, d = el.dataset;
+  if (el.closest("[data-dirty]")) { if (!dirty[tab]) { dirty[tab] = true; showDirty(); } return; }
+  try {
+    if (d.act === "char-name") await api("/api/char/desc", {id: d.id, name: el.value});
+    else if (d.act === "char-desc") await api("/api/char/desc", {id: d.id, text: el.value});
+    else if (d.act === "env-text") await api("/api/env/text", {id: d.id, text: el.value});
+    else if (d.act === "env-tag") await api("/api/env/text", {id: d.id, tag: el.value});
+    else if (d.act === "env-time") await api("/api/env/text", {id: d.id, time: el.value});
+    else if (d.act === "gen-model") { const g = d.id; const price = el.value.includes("2.5") ? 0.134 : 0.09; await api("/api/settings", {settings: {["video_" + g]: el.value, ["price_" + g]: price}}); }
+    else if (d.act === "approve-prompt") await api("/api/prompt", {gen: d.id, approved: el.checked});
+    else if (d.act === "qc") await api("/api/qc", {gen: d.id, [d.f]: el.checked});
+    else if (d.act === "qc-note") await api("/api/qc", {gen: d.id, note: el.value});
+    else return;
+    await refresh(true);
+  } catch (err) { toast("Lỗi: " + err.message, true); }
+});
+document.addEventListener("input", e => { if (e.target.closest("[data-dirty]") && !dirty[tab]) { dirty[tab] = true; showDirty(); } });
+window.addEventListener("beforeunload", e => { if (Object.values(dirty).some(Boolean)) { e.preventDefault(); e.returnValue = ""; } });
+loop();
+</script>
+</body>
+</html>
