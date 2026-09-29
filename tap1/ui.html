@@ -64,12 +64,21 @@
 const TOKEN = "__TAP1_TOKEN__";
 const $ = s => document.querySelector(s);
 let S = null, fatal = false;
+let typing = false;
+document.addEventListener("focusin", e => { if (e.target.matches("textarea, input[type=text]")) typing = true; });
+document.addEventListener("focusout", e => { if (e.target.matches("textarea, input[type=text]")) typing = false; });
 
 async function api(path, body) {
   const opt = { headers: { "X-Tap1-Token": TOKEN } };
   if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);
-  if (r.status === 403) { fatal = true; $("#offline").hidden = false; throw new Error("token"); }
+  if (r.status === 403) {
+    fatal = true;
+    $("#offline").hidden = false;
+    $("#offline").textContent = "App vừa mở lại hoặc đang chạy 2 cửa sổ cùng lúc — bấm F5 (tự tải lại nếu bạn không đang gõ dở).";
+    if (!typing) setTimeout(() => location.reload(), 2000);
+    throw new Error("token");
+  }
   return r.json();
 }
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
