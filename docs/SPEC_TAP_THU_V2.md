@@ -434,3 +434,40 @@ app.
 ### Testing (still mocks only)
 Exercise this with: one sample two-episode script+shot-list file, one sample character/environment/prop/
 style list file, and one fake reference library folder containing an `AI\` and a `THAT\` subfolder.
+
+## 16. Addendum #4 (2026-09-29) — model selection in Cài đặt
+
+A new "Cài đặt" (Settings) section, saved at series level (same `settings` object as the rest of the app).
+One dropdown per job category, price shown next to each model's name in the option list:
+
+1. **LLM viết prompt video** (the `prompt` stage only) — default `anthropic/claude-opus-5.5`. Options:
+   `openai/gpt-6-astra` ($10/$50 per 1M tok in/out), `anthropic/claude-opus-5.5` ($4/$20), `openai/gpt-6-sol`
+   ($2/$10), `anthropic/claude-sonnet-5` ($2/$10), `openai/gpt-5.5` ($5/$30). A "mức suy nghĩ" (low/medium/
+   high) selector appears next to it, enabled only when the selected model supports it (all five do) —
+   sent to WaveSpeed as `reasoning_effort` on the chat-completions body.
+2. **LLM rà soát prompt + mô tả kho ref** (the `review` stage, `reflib_scan`, and `critique` — anything
+   that needs to look at an image) — default and only listed option `google/gemini-3.6-flash` ($0.75/$3.8).
+3. **LLM việc lặt vặt** (`split_episodes`, `parse_list`, `preprod`, `suggest_components`, filling the
+   image-prompt templates from §15 item 3, and rewriting a chat edit request into an English instruction)
+   — default `openai/gpt-6-luna` ($0.1/$0.5).
+4. **Ảnh nhân vật + sheet** (`portrait`, `sheet`) — default `google/nano-banana-pro/edit` (2K $0.14, 4K
+   $0.24). Options also include `openai/gpt-image-2/edit` (quality low/medium/high × resolution 1k/2k/4k;
+   only `high@2k` = $0.41 is an owner-confirmed price, the other 8 cells default to the same number as a
+   safe placeholder — editable), `google/nano-banana-2/edit` (2K $0.105, 4K $0.14), `bytedance/seedream-
+   v5.0-pro/edit` ($0.0405). `openai/gpt-image-2/edit` also adds $0.012 per reference image beyond the
+   first — applied to portrait generation (the common multi-reference-image case) against the character's
+   component count.
+5. **Ảnh bối cảnh + prop** (`env_wide`, `env_rev`, `prop`) — same option list as item 4, same default.
+6. **Storyboard** — default `bytedance/seedream-v5.0-flash/edit` ($0.0243), selectable from the same list.
+7. **Chat sửa ảnh** — the per-message model dropdown (§14 item 3) now draws from the same shared image
+   model list/prices instead of a separate hardcoded one.
+8. An advanced "Sửa giá model bằng tay (JSON)" field holds `settings.model_prices`, keyed by model id
+   (`{"model/id": {"price_in": .., "price_out": ..}}` for an LLM, `{"model/id": {"price": ..}}` or
+   `{"price": {"2k": .., "4k": ..}}` for an image model) — the owner edits exactly the models whose price
+   changed; everything else keeps the built-in default. All cost math (dry-run estimates and the real
+   per-job cost) reads through this override, never the hardcoded default directly.
+
+Model ids/prices above are as the owner read them off WaveSpeed's own pricing page on 2026-09-29; the
+cloud sandbox this was built in cannot reach `wavespeed.ai`/`api.wavespeed.ai` (network policy), so this
+work could not independently re-verify them against WaveSpeed's live catalog — confirm again on the first
+real-key run (§12).

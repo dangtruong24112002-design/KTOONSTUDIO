@@ -206,9 +206,7 @@ function chatPanel(kind, id) {
     <div class="chatlog">${hist || '<div class="muted">Chưa sửa lần nào.</div>'}</div>
     <textarea class="chat-text" rows="2" placeholder="Yêu cầu sửa (tiếng Việt hoặc tiếng Anh)…"></textarea>
     <div class="row">
-      <select class="chat-model"><option value="bytedance/seedream-v5.0-flash/edit">Seedream (rẻ, ~$0.027)</option>
-        <option value="google/nano-banana-pro/edit">Nano Banana Pro</option>
-        <option value="openai/gpt-image-1/edit">GPT Image (giá chưa xác nhận)</option></select>
+      <select class="chat-model">${((S.model_catalog && S.model_catalog.image) || []).map(m => `<option value="${esc(m.id)}">${esc(imgOptLabel(m))}</option>`).join("")}</select>
       <select class="chat-res"><option value="2k">2K</option><option value="4k">4K</option></select>
     </div>
     <div class="row"><input type="file" class="chat-file" style="flex:2 1 140px">
@@ -230,7 +228,7 @@ function renderHeader() {
     `<div class="meter"><span class="muted">${esc(keys)}</span></div>` +
     `<button data-act="reload-keys">Đọc lại keys.txt</button>`;
   const jumps = [["#sec-script", "Kịch bản"], ["#sec-list", "Danh sách"], ["#sec-templates", "Prompt mẫu"], ["#sec-reflib", "Kho ref"],
-                 ["#sec-chars", "Nhân vật"], ["#sec-envs", "Bối cảnh"], ["#sec-props", "Prop"]]
+                 ["#sec-chars", "Nhân vật"], ["#sec-envs", "Bối cảnh"], ["#sec-props", "Prop"], ["#sec-settings", "Cài đặt"]]
     .concat((S.episodes_order || []).map(eid => ["#ep-" + eid, eid])).concat([["#sec-cost", "Chi phí"]]);
   $("#jump").innerHTML = jumps.map(([href, label]) => `<button data-jump="${href}">${esc(label)}</button>`).join("");
 }
@@ -283,7 +281,7 @@ function secScript(force) {
     let status = "";
     if (last && ACTIVE.includes(last.status)) status = `<div class="warnbox"><span class="spin"></span>GPT đang tách kịch bản thành các tập…</div>`;
     else if (last && last.status === "failed") status = `<div class="err">${esc(last.error)}</div>`;
-    return `<section class="card" id="sec-script"><h1>1. Kịch bản + Shot list</h1>
+    return `<section class="card"><h1>1. Kịch bản + Shot list</h1>
       <p class="hint">Tải file kịch bản/shot list của bạn lên (.txt .md .docx .xlsx .csv — PDF thì mở file, copy nội dung rồi dán vào ô dưới),
       hoặc dán trực tiếp. Tool sẽ tự tách thành từng tập (EP01, EP02…) và <b>giữ nguyên</b> số shot/mô tả/thoại/thời lượng bạn đã viết — chỉ tự viết thêm khi bạn không dán gì.</p>
       <div class="uprow"><label class="fld" style="flex:2 1 200px">Tải file kịch bản/shot list<input type="file" id="scriptFile" accept=".txt,.md,.docx,.xlsx,.csv"></label>
@@ -304,7 +302,7 @@ function secList(force) {
     else if (pjl && pjl.status === "failed") status = `<div class="err">${esc(pjl.error)}</div>`;
     if (rjl && ACTIVE.includes(rjl.status)) status += `<div class="warnbox"><span class="spin"></span>GPT đang tự đề xuất từ kịch bản…</div>`;
     else if (rjl && rjl.status === "failed") status += `<div class="err">${esc(rjl.error)}</div>`;
-    return `<section class="card" id="sec-list"><h1>2. Danh sách nhân vật / bối cảnh / prop / style</h1>
+    return `<section class="card"><h1>2. Danh sách nhân vật / bối cảnh / prop / style</h1>
       <p class="hint">Tải file danh sách của bạn lên hoặc dán trực tiếp — tool tách thành từng nhân vật, bối cảnh, prop và 1 khối "style" chung
       (vd "ultra realistic 8K Hollywood film…"). Xem/sửa/duyệt từng mục ở các khung bên dưới. Nếu không có file này, có thể để trống và bấm nút thứ 2 để GPT tự đề xuất từ kịch bản.</p>
       <div class="uprow"><label class="fld" style="flex:2 1 200px">Tải file danh sách<input type="file" id="listFile" accept=".txt,.md,.docx,.xlsx,.csv"></label>
@@ -322,7 +320,7 @@ function secList(force) {
 function secTemplates(force) {
   const T = [["char_single", "Ảnh đơn nhân vật (nền trắng)"], ["char_sheet", "Char sheet 21:9"], ["env", "Ảnh bối cảnh"],
              ["prop", "Ảnh prop (tuỳ chọn)"], ["video_structure", "Cấu trúc viết prompt video"], ["video_example", "Prompt video mẫu"]];
-  updateSec($("#main"), "templates", [S.templates], () => `<section class="card" id="sec-templates"><h1>3. Prompt mẫu (dùng chung cho cả series)</h1>
+  updateSec($("#main"), "templates", [S.templates], () => `<section class="card"><h1>3. Prompt mẫu (dùng chung cho cả series)</h1>
     <p class="hint">Dán mẫu prompt của bạn cho từng loại. GPT sẽ viết đúng cấu trúc và văn phong của mẫu, chỉ thay nội dung theo từng nhân vật/bối cảnh/prop/batch; khối style ở mục 2 luôn được chèn vào. Để trống thì GPT tự viết prompt kiểu chung chung.</p>
     ${T.map(([k, label]) => `<div class="stephead">${esc(label)}</div><textarea data-tpl="${k}" rows="3" placeholder="dán mẫu tiếng Anh ở đây (tuỳ chọn)…">${esc(S.templates[k] || "")}</textarea>
       <div class="row"><button data-act="save-template" data-key="${k}">Lưu mẫu ${esc(label)}</button></div>`).join("")}</section>`, force);
@@ -333,7 +331,7 @@ function secReflib(force) {
     let status = "";
     if (rjl && ACTIVE.includes(rjl.status)) status = `<div class="warnbox"><span class="spin"></span>Đang quét ảnh…</div>`;
     else if (rjl && rjl.status === "failed") status = `<div class="err">${esc(rjl.error)}</div>`;
-    return `<section class="card" id="sec-reflib"><h1>4. Kho ảnh tham chiếu</h1>
+    return `<section class="card"><h1>4. Kho ảnh tham chiếu</h1>
       <p class="hint">Dán đường dẫn 1 thư mục trên máy đang chạy app. Trong đó tạo 2 thư mục con: <b>AI\\</b> (ảnh AI — dùng được cho mặt)
       và <b>THAT\\</b> (ảnh người thật — chỉ dùng cho trang phục/tóc/dáng/tư thế, <b>tuyệt đối không</b> dùng cho mặt/mắt).
       Tool quét 1 lần, dùng model rẻ để mô tả và gắn nhãn từng ảnh, lưu lại — lần sau chỉ quét ảnh mới thêm vào.
@@ -414,23 +412,23 @@ function refCard(r) {
     ${uploadRow("video_ref", r.id, {label: "Tải clip (chỉ dùng làm tham chiếu chuyển động)"})}${takesRow("video_ref", r.id)}</div>`;
 }
 function secChars(force) {
-  updateSec($("#main"), "chars", [S.chars, S.jobs.filter(j => ["portrait","sheet","suggest_components"].includes(j.kind)).map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok],
-    () => `<section class="card" id="sec-chars"><h1>5. Nhân vật</h1>
+  updateSec($("#main"), "chars", [S.chars, S.jobs.filter(j => ["portrait","sheet","suggest_components"].includes(j.kind)).map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok, S.model_catalog],
+    () => `<section class="card"><h1>5. Nhân vật</h1>
       <div class="row between"><p class="hint">Sau khi duyệt nhân vật, dùng 2 nút này để làm 1 lần cho tất cả (thay vì bấm từng nhân vật):</p>
       <div class="row"><input id="newCharName" placeholder="tên nhân vật mới" style="width:180px"><button data-act="new-char">+ Nhân vật</button></div></div>
       <div class="row">${bulkBtn("portrait", "Tạo ảnh đơn tất cả nhân vật", "primary")}${bulkBtn("sheet", "Tạo char sheet cho nhân vật đã duyệt", "primary")}</div></section>
       <div class="grid">${Object.values(S.chars).map(charCard).join("") || '<p class="muted">Chưa có nhân vật — đọc danh sách ở mục 2 hoặc bấm + Nhân vật.</p>'}</div>`, force);
 }
 function secEnvs(force) {
-  updateSec($("#main"), "envs", [S.envs, S.jobs.filter(j => ["env_wide","env_rev"].includes(j.kind)).map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok],
-    () => `<section class="card" id="sec-envs"><h1>6. Bối cảnh</h1>
+  updateSec($("#main"), "envs", [S.envs, S.jobs.filter(j => ["env_wide","env_rev"].includes(j.kind)).map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok, S.model_catalog],
+    () => `<section class="card"><h1>6. Bối cảnh</h1>
       <div class="row between"><div class="row">${bulkBtn("env_wide", "Tạo ảnh bối cảnh (wide) — tất cả", "primary")}</div>
       <div class="row"><input id="newEnvName" placeholder="tên bối cảnh mới" style="width:180px"><button data-act="new-env">+ Bối cảnh</button></div></div></section>
       <div class="grid">${Object.values(S.envs).map(envCard).join("") || '<p class="muted">Chưa có bối cảnh.</p>'}</div>`, force);
 }
 function secProps(force) {
-  updateSec($("#main"), "props", [S.props, S.jobs.filter(j => j.kind === "prop").map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok],
-    () => `<section class="card" id="sec-props"><h1>7. Prop</h1>
+  updateSec($("#main"), "props", [S.props, S.jobs.filter(j => j.kind === "prop").map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok, S.model_catalog],
+    () => `<section class="card"><h1>7. Prop</h1>
       <div class="row between"><div class="row">${bulkBtn("prop", "Tạo ảnh prop — tất cả", "primary")}</div>
       <div class="row"><input id="newPropName" placeholder="tên prop mới" style="width:180px"><button data-act="new-prop">+ Prop</button></div></div></section>
       <div class="grid">${Object.values(S.props).map(propCard).join("") || '<p class="muted">Chưa có prop.</p>'}</div>`, force);
@@ -438,7 +436,7 @@ function secProps(force) {
 function secVoices(force) {
   updateSec($("#main"), "voices", [S.voices, S.jobs.filter(j => j.kind === "voice").map(j => j.id + j.status + j.file),
               Object.values(S.chars).map(c => c.id + c.name)],
-    () => `<section class="card" id="sec-voices"><h2>Giọng (tham chiếu âm sắc)</h2>
+    () => `<section class="card"><h2>Giọng (tham chiếu âm sắc)</h2>
       <div class="row"><input id="newVoiceName" placeholder="tên" style="width:120px">
       <select id="newVoiceChar"><option value="">— không gắn nhân vật —</option>${Object.values(S.chars).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select>
       <button data-act="new-voice">+ Giọng</button></div></section>
@@ -446,7 +444,7 @@ function secVoices(force) {
 }
 function secRefs(force) {
   updateSec($("#main"), "videorefs", [S.video_refs, S.jobs.filter(j => j.kind === "video_ref").map(j => j.id + j.status + j.file)],
-    () => `<section class="card" id="sec-videorefs"><h2>Video ref (tham chiếu chuyển động)</h2>
+    () => `<section class="card"><h2>Video ref (tham chiếu chuyển động)</h2>
       <div class="row"><input id="newRefName" placeholder="tên" style="width:180px"><button data-act="new-ref">+ Video ref</button></div></section>
       <div class="grid">${Object.values(S.video_refs).map(refCard).join("") || '<p class="muted">Chưa có video ref.</p>'}</div>`, force);
 }
@@ -486,7 +484,7 @@ function secEpShots(eid, force) {
   const el = document.getElementById("sec-epshots-" + eid);
   if (!el) return;
   if (!force && (dirty["epshots-" + eid] || isProtected(el))) { if (!el.querySelector(".dirty") && dirty["epshots-" + eid]) el.insertAdjacentHTML("afterbegin", dirtyBarHtml("epshots-" + eid)); return; }
-  const sig = JSON.stringify([ep.shots, jobs("storyboard").map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok]);
+  const sig = JSON.stringify([ep.shots, jobs("storyboard").map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok, S.model_catalog]);
   if (!force && el.dataset.sig === sig) return;
   el.dataset.sig = sig;
   el.innerHTML = `<section class="card"><h1>Tập ${esc(ep.name)} (${esc(eid)}) <span class="muted">· ${ep.shots.length} shot</span></h1>
@@ -639,6 +637,70 @@ function secEpisodesAll(force) {
       ${S.episodes_order.length ? "" : '<div class="warnbox">Chưa có tập nào nên chưa thấy phần Gen video ở đâu cả — quay lên mục 1 dán kịch bản rồi bấm "Tách thành các tập (GPT)", hoặc bấm "+ Tập trống" ở trên để tự tạo 1 tập rồi thêm shot tay.</div>'}</section>`, force);
   (S.episodes_order || []).forEach(eid => secEpisode(eid, force));
 }
+function llmOptLabel(m) {
+  return `${m.label} — $${m.price_in}/$${m.price_out} mỗi 1M token${m.vision ? " · cần nhìn ảnh" : ""}${m.thinking ? " · có mức suy nghĩ" : ""}`;
+}
+function imgOptLabel(m) {
+  let priceStr;
+  if (typeof m.price === "number") priceStr = usd(m.price, 4);
+  else {
+    const keys = Object.keys(m.price || {});
+    const allRes = keys.length && keys.every(k => k === "2k" || k === "4k");
+    priceStr = allRes ? keys.map(k => `${k.toUpperCase()} ${usd(m.price[k], 3)}`).join(" / ")
+                       : "từ " + usd(Math.min(...Object.values(m.price || {0: 0})), 3) + " (giá tạm, xem ghi chú)";
+  }
+  return `${m.label} — ${priceStr}${m.extra_image_price ? ` · +${usd(m.extra_image_price, 3)}/ảnh vào thêm` : ""}`;
+}
+function llmSelect(category, current) {
+  const opts = (S.model_catalog && S.model_catalog[category]) || [];
+  return `<select data-act="save-setting" data-key="${category}">
+    ${opts.map(m => `<option value="${esc(m.id)}" ${m.id === current ? "selected" : ""}>${esc(llmOptLabel(m))}</option>`).join("")}</select>`;
+}
+function imgSelect(key, current) {
+  const opts = (S.model_catalog && S.model_catalog.image) || [];
+  return `<select data-act="save-setting" data-key="${key}">
+    ${opts.map(m => `<option value="${esc(m.id)}" ${m.id === current ? "selected" : ""}>${esc(imgOptLabel(m))}</option>`).join("")}</select>`;
+}
+function secSettings(force) {
+  updateSec($("#main"), "settings", [S.settings, S.model_catalog], () => {
+    const st = S.settings;
+    const writeModel = ((S.model_catalog && S.model_catalog.llm_write) || []).find(m => m.id === st.llm_write);
+    const showThinking = writeModel && writeModel.thinking;
+    const gpt2 = ((S.model_catalog && S.model_catalog.image) || []).find(m => m.id === "openai/gpt-image-2/edit");
+    return `<section class="card"><h1>Cài đặt</h1>
+      <p class="hint">Chọn model cho từng việc — giá hiện ngay cạnh tên. Lưu theo series (dùng chung cho mọi tập). Giá lấy từ bảng owner cho biết 29/9 —
+      sandbox chạy phiên này không vào được wavespeed.ai để tự kiểm tra lại, nên vẫn cần owner xác nhận lại ở lần chạy key thật đầu tiên.</p>
+      <div class="stephead">LLM viết prompt video</div>
+      <div class="row">${llmSelect("llm_write", st.llm_write)}
+        ${showThinking ? `<select data-act="save-setting" data-key="llm_write_thinking">
+          <option value="" ${!st.llm_write_thinking ? "selected" : ""}>Mức suy nghĩ: mặc định</option>
+          <option value="low" ${st.llm_write_thinking === "low" ? "selected" : ""}>Thấp</option>
+          <option value="medium" ${st.llm_write_thinking === "medium" ? "selected" : ""}>Vừa</option>
+          <option value="high" ${st.llm_write_thinking === "high" ? "selected" : ""}>Cao</option></select>` :
+          '<span class="muted">Model này không có mức suy nghĩ</span>'}</div>
+      <div class="stephead">LLM rà soát prompt + mô tả kho ref (cần nhìn ảnh)</div>
+      <div class="row">${llmSelect("llm_review", st.llm_review)}</div>
+      <div class="stephead">LLM việc lặt vặt (tách tập, tách danh sách, viết lại lệnh chat sửa ảnh)</div>
+      <div class="row">${llmSelect("llm_misc", st.llm_misc)}</div>
+      <div class="stephead">Ảnh nhân vật + sheet</div>
+      <div class="row">${imgSelect("image_model_char", st.image_model_char)}</div>
+      <div class="stephead">Ảnh bối cảnh + prop</div>
+      <div class="row">${imgSelect("image_model_envprop", st.image_model_envprop)}</div>
+      <div class="stephead">Storyboard</div>
+      <div class="row">${imgSelect("storyboard_model", st.storyboard_model)}</div>
+      <div class="stephead">Chất lượng GPT Image 2 (áp dụng nếu chọn model này ở trên hoặc trong chat sửa ảnh)</div>
+      <div class="row"><select data-act="save-setting" data-key="gpt_image2_quality">
+        <option value="low" ${st.gpt_image2_quality === "low" ? "selected" : ""}>Thấp</option>
+        <option value="medium" ${st.gpt_image2_quality === "medium" ? "selected" : ""}>Vừa</option>
+        <option value="high" ${st.gpt_image2_quality === "high" ? "selected" : ""}>Cao</option></select></div>
+      ${gpt2 && gpt2.note ? `<div class="warnbox">${esc(gpt2.note)}</div>` : ""}
+      <details><summary>Sửa giá model bằng tay (JSON, nâng cao — dùng khi nhà cung cấp đổi giá)</summary>
+        <p class="hint">Mỗi model 1 dòng, vd <code>"anthropic/claude-opus-5.5": {"price_in": 4.0, "price_out": 20.0}</code> (LLM) hoặc
+        <code>"google/nano-banana-pro/edit": {"price": {"2k": 0.14, "4k": 0.24}}</code> (ảnh). Chỉ cần ghi model muốn sửa giá, model khác giữ giá mặc định.</p>
+        <textarea id="modelPricesJson" rows="8">${esc(JSON.stringify(st.model_prices || {}, null, 1))}</textarea>
+        <div class="row"><button data-act="save-model-prices">Lưu giá model</button></div></details></section>`;
+  }, force);
+}
 function secCost(force) {
   updateSec($("#main"), "cost", [S.cost, S.by_stage, S.balance, S.jobs.filter(j => j.measured).map(j => j.id)], () => {
     const c = S.cost;
@@ -648,7 +710,7 @@ function secCost(force) {
     const bal = ["wavespeed", "atlas"].map(p => { const b = S.balance[p] || {}; const name = p === "atlas" ? "Atlas Cloud" : "WaveSpeed";
       return `<tr><td>${name}${S.keys[p] ? "" : ' <span class="muted">(chưa có key)</span>'}</td><td class="num">${b.start != null ? usd(b.start, 2) : "—"}</td><td class="num">${b.now != null ? usd(b.now, 2) : "—"}</td><td class="num">${b.start != null && b.now != null ? usd(b.start - b.now, 3) : "—"}</td></tr>`; }).join("");
     const measured = S.jobs.filter(j => j.measured);
-    return `<section class="card" id="sec-cost"><h1>13. Chi phí</h1><div class="kpis">
+    return `<section class="card"><h1>13. Chi phí</h1><div class="kpis">
         <div class="kpi"><div class="muted">Đã chi</div><div class="big">${usd(c.spent, 2)}</div></div>
         <div class="kpi"><div class="muted">Thực chi (số dư giảm)</div><div class="big">${c.real != null ? usd(c.real, 2) : "—"}</div></div>
         <div class="kpi"><div class="muted">×60 tập, quy VND</div><div class="big">${trieu(c.projection_vnd)}</div><div class="muted">mục tiêu ≤ 30 triệu, hợp đồng 50 triệu</div></div>
@@ -670,6 +732,7 @@ function renderAll(force) {
   renderHeader();
   secProject(force); secScript(force); secList(force); secTemplates(force); secReflib(force);
   secChars(force); secEnvs(force); secProps(force); secVoices(force); secRefs(force);
+  secSettings(force);
   secEpisodesAll(force);
   secCost(force);
 }
@@ -766,6 +829,9 @@ document.addEventListener("click", async e => {
       case "storyboard-toggle": { const sh = Object.values(S.episodes).flatMap(e => e.shots).find(x => x.id === d.id);
         const r = await api("/api/shot/storyboard", {id: d.id, on: !sh.storyboard_on});
         if (r.error) toast(r.error, true); await refresh(); break; }
+      case "save-model-prices": { let mp; try { mp = JSON.parse($("#modelPricesJson").value); } catch (err) { toast("JSON lỗi: " + err.message, true); break; }
+        const r = await api("/api/settings", {settings: {model_prices: mp}}); delete dirty.settings;
+        if (r.error) toast(r.error, true); else toast("Đã lưu giá model"); await refresh(); break; }
     }
   } catch (err) { if (err.message !== "token") toast("Lỗi: " + err.message, true); }
 });
@@ -786,6 +852,7 @@ document.addEventListener("change", async e => {
     else if (d.act === "approve-prompt") await api("/api/prompt", {batch: d.id, approved: el.checked});
     else if (d.act === "qc") await api("/api/qc", {batch: d.id, [d.f]: el.checked});
     else if (d.act === "qc-note") await api("/api/qc", {batch: d.id, note: el.value});
+    else if (d.act === "save-setting") await api("/api/settings", {settings: {[d.key]: el.value}});
     else return;
     await refresh();
   } catch (err) { toast("Lỗi: " + err.message, true); }

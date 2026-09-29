@@ -52,6 +52,90 @@ N_EPISODES = 60
 
 IMAGE_PRICE = {"1k": 0.14, "2k": 0.14, "4k": 0.24}
 COMPONENT_USES = ["face", "eyes", "hair", "costume", "body", "pose", "other"]
+
+# ---------------------------------------------------------------- model catalog (addendum #4, spec §16)
+# Model ids/prices as given by the owner from WaveSpeed's own pricing page (checked by the owner on
+# 2026-09-29). This sandbox's network policy blocks wavespeed.ai/api.wavespeed.ai, so this session could
+# not independently re-verify them against WaveSpeed's live catalog — re-check on the first real-key run
+# (docs/SPEC_TAP_THU_V2.md §12/§16). Prices in USD; LLM prices per 1M tokens (in/out); image prices per image.
+LLM_WRITE_CATALOG = [
+    {"id": "anthropic/claude-opus-5.5", "label": "Claude Opus 5.5", "price_in": 4.0, "price_out": 20.0, "thinking": True},
+    {"id": "openai/gpt-6-astra", "label": "GPT-6 Astra", "price_in": 10.0, "price_out": 50.0, "thinking": True},
+    {"id": "openai/gpt-6-sol", "label": "GPT-6 Sol", "price_in": 2.0, "price_out": 10.0, "thinking": True},
+    {"id": "anthropic/claude-sonnet-5", "label": "Claude Sonnet 5", "price_in": 2.0, "price_out": 10.0, "thinking": True},
+    {"id": "openai/gpt-5.5", "label": "GPT-5.5", "price_in": 5.0, "price_out": 30.0, "thinking": True},
+]
+LLM_REVIEW_CATALOG = [
+    {"id": "google/gemini-3.6-flash", "label": "Gemini 3.6 Flash", "price_in": 0.75, "price_out": 3.8, "vision": True},
+]
+LLM_MISC_CATALOG = [
+    {"id": "openai/gpt-6-luna", "label": "GPT-6 Luna", "price_in": 0.1, "price_out": 0.5},
+]
+LLM_CATALOGS = {"llm_write": LLM_WRITE_CATALOG, "llm_review": LLM_REVIEW_CATALOG, "llm_misc": LLM_MISC_CATALOG}
+
+_GPT_IMAGE2_PRICE = {f"{q}@{r}": 0.41 for q in ("low", "medium", "high") for r in ("1k", "2k", "4k")}
+IMAGE_CATALOG = [
+    {"id": "google/nano-banana-pro/edit", "label": "Nano Banana Pro", "price": {"2k": 0.14, "4k": 0.24}},
+    {"id": "openai/gpt-image-2/edit", "label": "GPT Image 2", "price": _GPT_IMAGE2_PRICE, "extra_image_price": 0.012,
+     "note": "Chỉ high@2k ($0.41) là giá owner xác nhận — các ô khác tạm copy cùng giá, sửa lại trong Cài đặt khi biết giá thật."},
+    {"id": "google/nano-banana-2/edit", "label": "Nano Banana 2", "price": {"2k": 0.105, "4k": 0.14}},
+    {"id": "bytedance/seedream-v5.0-pro/edit", "label": "Seedream v5.0 Pro", "price": 0.0405},
+    {"id": "bytedance/seedream-v5.0-flash/edit", "label": "Seedream v5.0 Flash", "price": 0.0243},
+]
+
+
+def _catalog_lookup(cat_list, model_id):
+    return next((dict(m) for m in cat_list if m["id"] == model_id), None)
+
+
+def llm_catalog_entry(category, model_id):
+    """category in llm_write|llm_review|llm_misc. Owner price overrides in Cài đặt (settings.model_prices) win."""
+    entry = _catalog_lookup(LLM_CATALOGS.get(category, []), model_id) or \
+        {"id": model_id, "label": model_id, "price_in": 5.0, "price_out": 30.0, "thinking": False}
+    ov = STATE["settings"].get("model_prices", {}).get(model_id)
+    if ov:
+        entry.update(ov)
+    return entry
+
+
+def image_catalog_entry(model_id):
+    entry = _catalog_lookup(IMAGE_CATALOG, model_id) or {"id": model_id, "label": model_id, "price": IMAGE_PRICE}
+    ov = STATE["settings"].get("model_prices", {}).get(model_id)
+    if ov:
+        entry.update(ov)
+    return entry
+
+
+def llm_price(category, model_id):
+    e = llm_catalog_entry(category, model_id)
+    return e.get("price_in", 5.0), e.get("price_out", 30.0)
+
+
+def image_price(model_id, resolution="2k", quality=None):
+    e = image_catalog_entry(model_id)
+    price = e.get("price", IMAGE_PRICE)
+    if isinstance(price, dict):
+        key = f"{quality}@{resolution}" if quality else resolution
+        if key in price:
+            return price[key]
+        if resolution in price:
+            return price[resolution]
+        return next(iter(price.values()), 0.14)
+    return float(price)
+
+
+def image_extra_price(model_id):
+    return float(image_catalog_entry(model_id).get("extra_image_price", 0) or 0)
+
+
+def full_model_catalog():
+    """Merged catalog (defaults + owner overrides) for the Cài đặt UI — never mutates STATE."""
+    return {
+        "llm_write": [llm_catalog_entry("llm_write", m["id"]) for m in LLM_WRITE_CATALOG],
+        "llm_review": [llm_catalog_entry("llm_review", m["id"]) for m in LLM_REVIEW_CATALOG],
+        "llm_misc": [llm_catalog_entry("llm_misc", m["id"]) for m in LLM_MISC_CATALOG],
+        "image": [image_catalog_entry(m["id"]) for m in IMAGE_CATALOG],
+    }
 TIER_MODEL = {"hook": "bytedance/seedance-2.5/reference-to-video", "cliffhanger": "bytedance/seedance-2.5/reference-to-video",
               "key": "bytedance/seedance-2.5/reference-to-video", "normal": "bytedance/seedance-2.0/reference-to-video"}
 TIER_PRICE = {"hook": 0.134, "cliffhanger": 0.134, "key": 0.134, "normal": 0.09}
@@ -59,11 +143,16 @@ TIER_MAXDUR = {"hook": 30, "cliffhanger": 30, "key": 30, "normal": 15}
 TIER_NAME = {"hook": "hook", "cliffhanger": "cliffhanger", "key": "key (2.5)", "normal": "normal"}
 
 DEFAULT_SETTINGS = {
-    "llm_write": "openai/gpt-5.5", "llm_write_in": 5.0, "llm_write_out": 30.0,
-    "llm_review": "google/gemini-3.6-flash", "llm_review_in": 0.75, "llm_review_out": 3.8,
+    "llm_write": "anthropic/claude-opus-5.5", "llm_write_thinking": "",
+    "llm_review": "google/gemini-3.6-flash",
+    "llm_misc": "openai/gpt-6-luna",
+    "image_model_char": "google/nano-banana-pro/edit",
+    "image_model_envprop": "google/nano-banana-pro/edit",
+    "gpt_image2_quality": "high",
     "image_resolution": "2k", "sheet_resolution": "2k",
-    "storyboard_model": "bytedance/seedream-v5.0-flash/edit", "storyboard_price": 0.027,
+    "storyboard_model": "bytedance/seedream-v5.0-flash/edit",
     "resolution": "720p", "max_full_gens": 2, "max_edits_per_image": 10, "parallel": 2,
+    "model_prices": {},
 }
 STAGE_NAME = {"split_episodes": "Tách kịch bản thành các tập", "parse_list": "Đọc file danh sách",
               "preprod": "Đề xuất danh sách tiền kỳ", "reflib_scan": "Quét kho ref",
@@ -1025,10 +1114,11 @@ ASPECT_OF = {"portrait": "3:4", "sheet": "21:9", "env_wide": "9:16", "env_rev": 
 def chat_rewrite(text):
     ws = ws_client()
     st = S()
-    content, usage = ws.chat(st["llm_write"], REWRITE_SYS, text, False)
+    pin, pout = llm_price("llm_misc", st["llm_misc"])
+    content, usage = ws.chat(st["llm_misc"], REWRITE_SYS, text, False)
     pt = usage.get("prompt_tokens") or int((len(REWRITE_SYS) + len(text)) / 3.5)
     ct = usage.get("completion_tokens") or int(len(content) / 3.5)
-    cost = round(pt / 1e6 * st["llm_write_in"] + ct / 1e6 * st["llm_write_out"], 5)
+    cost = round(pt / 1e6 * pin + ct / 1e6 * pout, 5)
     return content.strip(), cost
 
 
@@ -1038,11 +1128,12 @@ def template_prompt(template_key, item_context):
     style = STATE["style"].strip()
     ws = ws_client()
     st = S()
+    pin, pout = llm_price("llm_misc", st["llm_misc"])
     user = f"ITEM INFO:\n{item_context}\n\nSHARED STYLE BLOCK:\n{style or '(none given)'}\n\nTEMPLATE:\n{tmpl or '(none saved — write a clean prompt yourself)'}"
-    content, usage = ws.chat(st["llm_write"], TEMPLATE_FILL_SYS, user, False)
+    content, usage = ws.chat(st["llm_misc"], TEMPLATE_FILL_SYS, user, False)
     pt = usage.get("prompt_tokens") or int((len(TEMPLATE_FILL_SYS) + len(user)) / 3.5)
     ct = usage.get("completion_tokens") or int(len(content) / 3.5)
-    cost = round(pt / 1e6 * st["llm_write_in"] + ct / 1e6 * st["llm_write_out"], 5)
+    cost = round(pt / 1e6 * pin + ct / 1e6 * pout, 5)
     return content.strip(), cost
 
 
@@ -1062,14 +1153,6 @@ def build_edit_body(job):
     return body, rewritten, {"rewrite_cost": rewrite_cost}
 
 
-def image_price_for(model, resolution):
-    if "nano-banana" in model:
-        return IMAGE_PRICE.get(resolution, 0.14)
-    if "seedream" in model:
-        return 0.027
-    if "gpt-image" in model:
-        return 0.19  # unverified — check WaveSpeed's own listing before the first real run (spec §14.3)
-    return IMAGE_PRICE.get(resolution, 0.14)
 
 
 TEMPLATE_EST = 0.02  # flat estimate added to a dry-run when a template-fill LLM call will run first
@@ -1180,26 +1263,30 @@ def specs_for(stage, target=None, redo=False):
     if stage == "split_episodes":
         if not STATE["script_raw"].strip():
             return [], "Chưa có kịch bản/shot list."
-        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(SPLIT_EPISODES_SYS) + len(STATE["script_raw"]), 4000)
-        return [dict(kind="split_episodes", target="ep", provider="wavespeed", model=st["llm_write"], units=1,
+        pin, pout = llm_price("llm_misc", st["llm_misc"])
+        est = llm_est(pin, pout, len(SPLIT_EPISODES_SYS) + len(STATE["script_raw"]), 4000)
+        return [dict(kind="split_episodes", target="ep", provider="wavespeed", model=st["llm_misc"], units=1,
                      unit_price=round(est, 4), label="Tách kịch bản thành các tập")], None
     if stage == "parse_list":
         if not STATE["list_raw"].strip():
             return [], "Chưa có file/nội dung danh sách nhân vật-bối cảnh-prop-style."
-        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(PARSE_LIST_SYS) + len(STATE["list_raw"]), 1600)
-        return [dict(kind="parse_list", target="ep", provider="wavespeed", model=st["llm_write"], units=1,
+        pin, pout = llm_price("llm_misc", st["llm_misc"])
+        est = llm_est(pin, pout, len(PARSE_LIST_SYS) + len(STATE["list_raw"]), 1600)
+        return [dict(kind="parse_list", target="ep", provider="wavespeed", model=st["llm_misc"], units=1,
                      unit_price=round(est, 4), label="Đọc file danh sách")], None
     if stage == "preprod":
         if not STATE["script_raw"].strip():
             return [], "Chưa có kịch bản."
-        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(PREPROD_SYS) + len(STATE["script_raw"]), 1400)
-        return [dict(kind="preprod", target="ep", provider="wavespeed", model=st["llm_write"], units=1,
+        pin, pout = llm_price("llm_misc", st["llm_misc"])
+        est = llm_est(pin, pout, len(PREPROD_SYS) + len(STATE["script_raw"]), 1400)
+        return [dict(kind="preprod", target="ep", provider="wavespeed", model=st["llm_misc"], units=1,
                      unit_price=round(est, 4), label="Đề xuất danh sách tiền kỳ (từ kịch bản)")], None
     if stage == "reflib_scan":
         new = reflib_unscanned()
         if not new:
             return [], "Không có ảnh mới trong kho ref (hoặc chưa đặt đường dẫn)."
-        est = llm_est(st["llm_review_in"], st["llm_review_out"], len(REFLIB_TAG_SYS), 60)
+        pin, pout = llm_price("llm_review", st["llm_review"])
+        est = llm_est(pin, pout, len(REFLIB_TAG_SYS), 60)
         return [dict(kind="reflib_scan", target="ep", provider="wavespeed", model=st["llm_review"], units=len(new),
                      unit_price=round(est, 5), label=f"Quét {len(new)} ảnh trong kho ref")], None
     if stage == "suggest_components":
@@ -1207,8 +1294,9 @@ def specs_for(stage, target=None, redo=False):
             return [], "Không có nhân vật này."
         if not STATE["reflib"]["scanned"]:
             return [], "Chưa quét kho ref."
-        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(SUGGEST_COMPONENTS_SYS) + 2000, 200)
-        return [dict(kind="suggest_components", target=target, provider="wavespeed", model=st["llm_write"], units=1,
+        pin, pout = llm_price("llm_misc", st["llm_misc"])
+        est = llm_est(pin, pout, len(SUGGEST_COMPONENTS_SYS) + 2000, 200)
+        return [dict(kind="suggest_components", target=target, provider="wavespeed", model=st["llm_misc"], units=1,
                      unit_price=round(est, 4), label=f"Gợi ý ảnh thành phần {STATE['chars'][target]['name']}")], None
     if stage == "refs_all":
         out = []
@@ -1233,8 +1321,11 @@ def specs_for(stage, target=None, redo=False):
                 if target:
                     return [], f"{c['name']}: chưa có ảnh thành phần nào."
                 continue
-            out.append(dict(kind="portrait", target=c["id"], provider="wavespeed", model="google/nano-banana-pro/edit",
-                             units=1, unit_price=IMAGE_PRICE[st["image_resolution"]] + TEMPLATE_EST, label=f"Ảnh nhân vật {c['name']}"))
+            model = st["image_model_char"]
+            price = (image_price(model, resolution=st["image_resolution"], quality=st.get("gpt_image2_quality")) + TEMPLATE_EST +
+                     image_extra_price(model) * max(0, len(c["components"]) - 1))
+            out.append(dict(kind="portrait", target=c["id"], provider="wavespeed", model=model,
+                             units=1, unit_price=round(price, 4), label=f"Ảnh nhân vật {c['name']}"))
         return out, None
     if stage == "sheet":
         out = []
@@ -1247,8 +1338,10 @@ def specs_for(stage, target=None, redo=False):
                 if target:
                     return [], f"{c['name']}: chưa có ảnh nhân vật được duyệt."
                 continue
-            out.append(dict(kind="sheet", target=c["id"], provider="wavespeed", model="google/nano-banana-pro/edit",
-                             units=1, unit_price=IMAGE_PRICE[st["sheet_resolution"]] + TEMPLATE_EST, label=f"Sheet 21:9 {c['name']}"))
+            model = st["image_model_char"]
+            price = image_price(model, resolution=st["sheet_resolution"], quality=st.get("gpt_image2_quality")) + TEMPLATE_EST
+            out.append(dict(kind="sheet", target=c["id"], provider="wavespeed", model=model,
+                             units=1, unit_price=round(price, 4), label=f"Sheet 21:9 {c['name']}"))
         return out, None
     if stage in ("env_wide", "env_rev"):
         out = []
@@ -1265,8 +1358,10 @@ def specs_for(stage, target=None, redo=False):
                 if target:
                     return [], f"{e['name']}: chưa có mô tả bối cảnh."
                 continue
-            out.append(dict(kind=stage, target=e["id"], provider="wavespeed", model="google/nano-banana-pro/text-to-image",
-                             units=1, unit_price=IMAGE_PRICE[st["image_resolution"]] + TEMPLATE_EST,
+            model = st["image_model_envprop"]
+            price = image_price(model, resolution=st["image_resolution"], quality=st.get("gpt_image2_quality")) + TEMPLATE_EST
+            out.append(dict(kind=stage, target=e["id"], provider="wavespeed", model=model,
+                             units=1, unit_price=round(price, 4),
                              label=("Ảnh bối cảnh " if stage == "env_wide" else "Bối cảnh góc ngược ") + e["name"]))
         return out, None
     if stage == "prop":
@@ -1280,8 +1375,10 @@ def specs_for(stage, target=None, redo=False):
                 continue
             if not redo and live_takes("prop", p["id"]):
                 continue
-            out.append(dict(kind="prop", target=p["id"], provider="wavespeed", model="google/nano-banana-pro/text-to-image",
-                             units=1, unit_price=IMAGE_PRICE[st["image_resolution"]] + TEMPLATE_EST, label=f"Ảnh prop {p['name']}"))
+            model = st["image_model_envprop"]
+            price = image_price(model, resolution=st["image_resolution"], quality=st.get("gpt_image2_quality")) + TEMPLATE_EST
+            out.append(dict(kind="prop", target=p["id"], provider="wavespeed", model=model,
+                             units=1, unit_price=round(price, 4), label=f"Ảnh prop {p['name']}"))
         return out, None
     if stage == "storyboard":
         out = []
@@ -1301,9 +1398,9 @@ def specs_for(stage, target=None, redo=False):
                         return [], f"{sh['id']}: thiếu sheet nhân vật {', '.join(missing)}."
                     continue
                 model = st["storyboard_model"]
-                price = st["storyboard_price"] if "seedream" in model else IMAGE_PRICE.get(st["image_resolution"], 0.14)
+                price = image_price(model, resolution=st["image_resolution"], quality=st.get("gpt_image2_quality"))
                 out.append(dict(kind="storyboard", target=sh["id"], provider="wavespeed", model=model, units=1,
-                                 unit_price=price, label=f"Storyboard {sh['id']}"))
+                                 unit_price=round(price, 4), label=f"Storyboard {sh['id']}"))
         return out, None
     if stage == "critique":
         if not STATE.get("llm_vision_ok", True):
@@ -1311,7 +1408,8 @@ def specs_for(stage, target=None, redo=False):
         kind, tgt = (target or "").split(":", 1) if target and ":" in target else (None, None)
         if not kind or not pick(kind, tgt):
             return [], "Chưa có ảnh để nhận xét."
-        est = llm_est(st["llm_review_in"], st["llm_review_out"], len(CRITIQUE_SYS), 300)
+        pin, pout = llm_price("llm_review", st["llm_review"])
+        est = llm_est(pin, pout, len(CRITIQUE_SYS), 300)
         return [dict(kind="critique", target=target, provider="wavespeed", model=st["llm_review"], units=1,
                      unit_price=round(est, 4), label=f"Nhận xét ảnh {target}")], None
     if stage in ("prompt", "review"):
@@ -1328,8 +1426,9 @@ def specs_for(stage, target=None, redo=False):
                     if is_batch_target:
                         return [], f"{b['id']}: chưa có prompt."
                     continue
-                price_in, price_out = (st["llm_write_in"], st["llm_write_out"]) if stage == "prompt" else (st["llm_review_in"], st["llm_review_out"])
-                model = st["llm_write"] if stage == "prompt" else st["llm_review"]
+                category = "llm_write" if stage == "prompt" else "llm_review"
+                model = st[category]
+                price_in, price_out = llm_price(category, model)
                 est = llm_est(price_in, price_out, 1800, 900)
                 out.append(dict(kind=stage, target=b["id"], provider="wavespeed", model=model, units=1, unit_price=round(est, 4),
                                  label=(STAGE_NAME[stage]) + " " + b["id"]))
@@ -1369,8 +1468,10 @@ def specs_for(stage, target=None, redo=False):
             return [], "Không có fix này."
         if not redo and live_takes("fix_img", target):
             return [], None
-        return [dict(kind="fix_img", target=target, provider="wavespeed", model="google/nano-banana-pro/edit",
-                     units=1, unit_price=IMAGE_PRICE[S()["image_resolution"]], label=f"Ảnh sửa {target}")], None
+        model = S()["image_model_char"]
+        return [dict(kind="fix_img", target=target, provider="wavespeed", model=model,
+                     units=1, unit_price=round(image_price(model, resolution=S()["image_resolution"], quality=S().get("gpt_image2_quality")), 4),
+                     label=f"Ảnh sửa {target}")], None
     if stage == "patch":
         f = _find_fix_safe(target)
         if not f:
@@ -1410,7 +1511,7 @@ def create_chat_job(kind, target, text, model, resolution, attachments=None, dry
         limit = int(S().get("max_edits_per_image", 10))
         if len(edits) >= limit:
             return {"error": f"Đã sửa {limit} lần cho ảnh này (giới hạn trong Cài đặt)."}
-        price = image_price_for(model, resolution)
+        price = image_price(model, resolution=resolution, quality=S().get("gpt_image2_quality"))
         if dry:
             return {"n": 1, "est": price, "items": [f"Sửa ảnh ({model}) · ~${price:.3f}"]}
         spent, reserved = money()
@@ -1509,15 +1610,19 @@ def run_llm(jid):
         st = dict(S())
     ws = ws_client()
     images = None
+    reasoning = None
     if job["kind"] == "split_episodes":
         system, user = SPLIT_EPISODES_SYS, "Script/shot list:\n\n" + STATE["script_raw"] + "\n\nReturn the JSON object now."
-        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+        model, jm = st["llm_misc"], True
+        pin, pout = llm_price("llm_misc", model)
     elif job["kind"] == "parse_list":
         system, user = PARSE_LIST_SYS, "List file content:\n\n" + STATE["list_raw"] + "\n\nReturn the JSON object now."
-        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+        model, jm = st["llm_misc"], True
+        pin, pout = llm_price("llm_misc", model)
     elif job["kind"] == "preprod":
         system, user = PREPROD_SYS, "Screenplay:\n\n" + STATE["script_raw"]
-        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+        model, jm = st["llm_misc"], True
+        pin, pout = llm_price("llm_misc", model)
     elif job["kind"] == "reflib_scan":
         return run_reflib_scan(jid)
     elif job["kind"] == "suggest_components":
@@ -1525,7 +1630,8 @@ def run_llm(jid):
         c = STATE["chars"][job["target"]]
         listing = "\n".join(f"{i}: source={src} use={use} label={label}" for i, (_k, _p, src, use, label) in enumerate(cand))
         system, user = SUGGEST_COMPONENTS_SYS, f"Character description: {c['desc'] or c['name']}\n\nAvailable images:\n{listing}"
-        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+        model, jm = st["llm_misc"], True
+        pin, pout = llm_price("llm_misc", model)
     elif job["kind"] == "critique":
         kind, tgt = job["target"].split(":", 1)
         j = pick(kind, tgt)
@@ -1533,7 +1639,8 @@ def run_llm(jid):
             raise ApiError("Chưa có ảnh để nhận xét.")
         images = [url_of(j)]
         system, user = CRITIQUE_SYS, "Critique this reference image."
-        model, jm, pin, pout = st["llm_review"], False, st["llm_review_in"], st["llm_review_out"]
+        model, jm = st["llm_review"], False
+        pin, pout = llm_price("llm_review", model)
     elif job["kind"] == "prompt":
         bid = job["target"]
         ep, b = batch_by_id(bid)
@@ -1548,7 +1655,10 @@ def run_llm(jid):
                 f"Reference mapping (use these numbers only):\n{mapping['text']}\n\n"
                 f"Beats: {json.dumps(mapping['ctx']['beats'], ensure_ascii=False)}\n"
                 f"Dialogue: {json.dumps(mapping['ctx']['lines'], ensure_ascii=False)}\nWrite the prompt now.")
-        model, jm, pin, pout = st["llm_write"], False, st["llm_write_in"], st["llm_write_out"]
+        model, jm = st["llm_write"], False
+        pin, pout = llm_price("llm_write", model)
+        if st.get("llm_write_thinking") and llm_catalog_entry("llm_write", model).get("thinking"):
+            reasoning = st["llm_write_thinking"]
     else:  # review
         bid = job["target"]
         ep, b = batch_by_id(bid)
@@ -1556,10 +1666,11 @@ def run_llm(jid):
         user = (f"Prompt:\n{ep['prompts'].get(bid, {}).get('text', '')}\n\nBatch JSON subset:\n"
                 f"{json.dumps({'beats': mapping['ctx']['beats'], 'lines': mapping['ctx']['lines']}, ensure_ascii=False)}")
         system = REVIEW_SYS
-        model, jm, pin, pout = st["llm_review"], True, st["llm_review_in"], st["llm_review_out"]
+        model, jm = st["llm_review"], True
+        pin, pout = llm_price("llm_review", model)
     log(f"Gọi {model} ({STAGE_NAME[job['kind']]}) — có thể mất 20-120 giây…")
     try:
-        content, usage = ws.chat(model, system, user, jm, images=images)
+        content, usage = ws.chat(model, system, user, jm, images=images, reasoning=reasoning)
     except ApiError as e:
         if images and e.code in (400, 422):
             with LOCK:
@@ -1639,6 +1750,7 @@ def run_reflib_scan(jid):
     st = S()
     new = reflib_unscanned()
     ws = ws_client()
+    pin, pout = llm_price("llm_review", st["llm_review"])
     tagged, cost_total = 0, 0.0
     for path, source in new:
         label, use = path.stem.replace("_", " ").replace("-", " "), "other"
@@ -1651,7 +1763,7 @@ def run_reflib_scan(jid):
                 use = d["use"]
             pt = usage.get("prompt_tokens") or 200
             ct = usage.get("completion_tokens") or 30
-            cost_total += pt / 1e6 * st["llm_review_in"] + ct / 1e6 * st["llm_review_out"]
+            cost_total += pt / 1e6 * pin + ct / 1e6 * pout
         except ApiError as e:
             if e.code in (400, 422):
                 with LOCK:
@@ -2007,4 +2119,4 @@ def public_state():
                 "balance": STATE["balance"], "cost": cost_summary(), "component_uses": COMPONENT_USES,
                 "ffmpeg": bool(shutil.which("ffmpeg")), "tier_name": TIER_NAME,
                 "running": len(RUNNING), "stage_names": STAGE_NAME,
-                "series_kinds": sorted(SERIES_KINDS), "mapping": mapping}
+                "series_kinds": sorted(SERIES_KINDS), "mapping": mapping, "model_catalog": full_model_catalog()}

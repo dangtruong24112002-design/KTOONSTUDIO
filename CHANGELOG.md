@@ -22,3 +22,11 @@
   episode below) that protects in-progress edits anywhere on the page from being clobbered by unrelated
   background job updates. Rewrote `e2e_v2.py`/`checks_v2.py` for the new flow (still mocks only) and
   fixed two rendering staleness bugs and one focus-tracking bug found while building the new UI.
+- 2026-09-29 Thêm mục "Cài đặt" cho `tap_thu_v2` (docs/SPEC_TAP_THU_V2.md §16, yêu cầu #4): chọn model
+  riêng cho từng việc (viết prompt video, rà soát + mô tả kho ref, việc lặt vặt, ảnh nhân vật/sheet, ảnh
+  bối cảnh/prop, storyboard, chat sửa ảnh) qua danh sách thả xuống có hiện giá cạnh tên, lưu theo series;
+  thêm ô "mức suy nghĩ" cho model LLM hỗ trợ; giá model sửa được bằng tay (JSON) trong Cài đặt khi nhà
+  cung cấp đổi giá. Model mặc định đổi theo bảng giá owner cung cấp 29/9 (Claude Opus 5.5 cho viết prompt
+  video, GPT-6 Luna cho việc lặt vặt...) — sandbox không vào được wavespeed.ai nên chưa tự kiểm tra lại
+  được mã model/giá, cần owner xác nhận ở lần chạy key thật đầu tiên. Test bằng API giả, đã chạy
+  checks_v2.py + e2e_v2.py pass.

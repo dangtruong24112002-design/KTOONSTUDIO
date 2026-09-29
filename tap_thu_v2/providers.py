@@ -118,7 +118,7 @@ class WaveSpeed:
         r = http("GET", f"{self.base}/balance", self.key, timeout=30)
         return float((r.get("data") or {}).get("balance"))
 
-    def chat(self, model, system, user, json_mode, images=None):
+    def chat(self, model, system, user, json_mode, images=None, reasoning=None):
         user_content = user
         if images:
             # OpenAI-style content parts. Open item (spec §12): unverified whether the WaveSpeed LLM accepts these.
@@ -126,6 +126,10 @@ class WaveSpeed:
         body = {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_content}]}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+        if reasoning:
+            # OpenAI Chat Completions "reasoning_effort" convention (low|medium|high). Open item (spec §16):
+            # unverified whether WaveSpeed forwards this the same way for every underlying model (e.g. Claude).
+            body["reasoning_effort"] = reasoning
         try:
             r = http("POST", f"{self.llm_base}/chat/completions", self.key, body, timeout=900)
         except ApiError as e:
