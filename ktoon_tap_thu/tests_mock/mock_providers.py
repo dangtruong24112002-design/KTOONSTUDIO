@@ -80,6 +80,50 @@ CRITIQUE_TEXT = ("- Missing the back view on the sheet's right panel.\n- Backgro
 CONDENSED_TEXT = ("- Always shoot vertical 9:16, photoreal, cinematic color grade.\n- Never invent a reference "
                   "number; cite only the ones given.\n- Keep every prohibited-items line verbatim.")
 
+# ---------------------------------------------------------------- knowledge library v2 (spec §20, yêu cầu #7 bản chốt)
+SHEET_WHITE_BG_TEXT = ("Photoreal 21:9 character sheet, 4 full-body views + 4 face views, solid pure white "
+                       "background as required by the owner override, identity and outfit locked from the "
+                       "reference. No text, no watermark.")
+SHOTLIST_MD_TEXT = """# SEQUENCE 1: Alpha doi mat
+## SHOT 01: Can canh Alpha
+Duration: 2s
+Framing: Close-up
+Camera: Static, slow push-in
+Thoai: I've been looking for you.
+Character: Alpha
+SFX: wind through the trees
+Mood: tense, intense
+
+## SHOT 02: Nu chinh lui lai
+Duration: 5s
+Framing: Medium shot
+Camera: Pan following her retreat
+Thoai: Stay away from me.
+Character: Bride
+SFX: dry leaves
+Mood: afraid, defensive
+
+# SEQUENCE 2: Dai sanh mat trang
+## SHOT 03: Toan canh dai sanh
+Duration: 6s
+Framing: Wide shot
+Camera: Drone descending
+Thoai:
+Character:
+SFX: eerie ambient score
+Mood: grand, ancient
+
+## SHOT 04: Alpha buoc toi
+Framing: Medium close-up
+Camera: Handheld, following
+Thoai: We need to talk, now.
+Character: Alpha
+SFX: footsteps on stone
+Mood: urgent
+
+SOURCE: Kich ban goc EP01, doan mo dau.
+CONTINUITY NOTE: Alpha van mac ao choang den; anh trang xanh xuyen qua dai sanh."""
+
 
 def prompt_text_v2(target):
     return (f"[Creatives Description] Photoreal vertical 9:16 microdrama, generation {target}.\n"
@@ -185,6 +229,9 @@ class H(BaseHTTPRequestHandler):
             if auth != WS_KEY:
                 return self.send(401, {"error": "bad key"})
             sysmsg = body["messages"][0]["content"]
+            usermsg = body["messages"][1]["content"]
+            if isinstance(usermsg, list):
+                usermsg = "".join(p.get("text", "") for p in usermsg if isinstance(p, dict))
             time.sleep(0.5)
             if "head writer" in sysmsg:
                 content = SCRIPT
@@ -199,7 +246,14 @@ class H(BaseHTTPRequestHandler):
             elif "reference-component images" in sysmsg:
                 content = SUGGEST_COMPONENTS_JSON
             elif "fill in an image-generation prompt template" in sysmsg:
-                content = TEMPLATE_FILL_TEXT
+                content = SHEET_WHITE_BG_TEXT if "solid, pure white background" in usermsg else TEMPLATE_FILL_TEXT
+            elif "CINEMATIC LITERARY SHOTLIST WORKFLOW" in sysmsg:
+                # shotlist_from_script (spec §20 item 2a) once the shotlist_rules slot has content — the
+                # system prompt IS the owner's uploaded doc, not the built-in fallback.
+                content = SHOTLIST_MD_TEXT
+            elif "ALPHA VIDEO PROMPT RULES" in sysmsg:
+                # video-prompt writing (spec §20 item 2c) once project_system/video_writer are populated.
+                content = prompt_text_v2("B1")
             elif "Omni Reference prompt" in sysmsg:
                 content = prompt_text_v2("S1")
             elif "review one Seedance video prompt" in sysmsg:
@@ -210,6 +264,13 @@ class H(BaseHTTPRequestHandler):
                 content = CRITIQUE_TEXT
             elif "compress a long reference document" in sysmsg:
                 content = CONDENSED_TEXT
+            elif "split a reference document into logical sections" in sysmsg:
+                # kb_split (spec §20 item 1): a doc with no header structure — canned so the section title
+                # deliberately does NOT match the keyword table, forcing the kb_classify call below too.
+                content = json.dumps({"sections": [{"title": "Shotlist Workflow Notes", "text": usermsg.split("Document:\n\n", 1)[-1]}]})
+            elif "librarian for an AI video-production knowledge base" in sysmsg:
+                # kb_classify (spec §20 item 1): only reached for a section the keyword table missed.
+                content = json.dumps({"assign": [{"idx": 0, "slots": ["shotlist_rules"]}]})
             else:
                 content = plan_json()
             with LOCK:

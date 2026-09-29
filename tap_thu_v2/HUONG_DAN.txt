@@ -47,18 +47,29 @@ BƯỚC 3 — Làm theo đúng thứ tự trên 1 trang (trang dài, cuộn xu�
       ảnh prop, tài liệu cấu trúc viết prompt video, prompt video mẫu. GPT sẽ viết đúng cấu trúc/
       văn phong của mẫu, chỉ thay nội dung; khối style ở mục 2 luôn được chèn thêm vào. Để trống
       thì GPT tự viết theo kiểu chung chung.
-  3b Thư viện kiến thức (thay cho việc dán "Prompt mẫu" ở mục 3 mỗi lần)
-      Mục "Thư viện kiến thức" (xem hàng nút "nhảy nhanh" ở đầu trang): tải file (.txt .md .docx
-      .xlsx) hoặc dán text, gắn 1 trong 8 loại (shotlist/kịch bản, ảnh nhân vật, char sheet, bối
-      cảnh, prop, storyboard, prompt video, style). Mỗi lần chạy các bước tách tập, tạo ảnh, viết
-      prompt video, app tự lấy đúng loại tài liệu phù hợp chèn vào — không cần dán tay như mục 3.
-      Nếu ô "Prompt mẫu" ở mục 3 CÓ dán gì thì nó vẫn được ưu tiên dùng trước; để trống ô đó thì app
-      mới dùng tài liệu trong thư viện. Tải bản mới của cùng 1 loại sẽ ra phiên bản mới (v2, v3…),
-      chọn lại phiên bản cũ được bất cứ lúc nào, không mất bản nào. Tài liệu dài (trên ~3.000 từ) có
-      nút "Rút gọn thành bộ luật" (GPT tự rút gọn) — xem, sửa, bấm "Duyệt" thì mới dùng bản rút gọn
-      (đỡ tốn tiền mỗi lần gọi); chưa duyệt thì app vẫn dùng bản gốc đầy đủ. Mỗi ảnh/prompt tạo ra
-      đều ghi rõ đã dùng tài liệu nào, phiên bản nào (xem trong khung kết quả) — biết chỗ nào cần
-      sửa lại tài liệu nếu kết quả chưa đúng ý.
+  3b Thư viện kiến thức (thay cho việc dán "Prompt mẫu" ở mục 3 mỗi lần — bản chốt, xem docs §20)
+      Mục "Thư viện kiến thức" (xem hàng nút "nhảy nhanh" ở đầu trang): tải file (.txt .md .docx .xlsx)
+      hoặc dán text — KHÔNG cần gắn loại. "Thủ thư" (GPT việc lặt vặt) tự đọc, chia đoạn (theo tiêu đề
+      nếu có, GPT tự chia nếu không) và gán từng đoạn vào đúng "khe" (quy tắc shot list, chỉ dẫn hệ
+      thống dự án, mẫu điền việc, ảnh nhân vật/sheet/bối cảnh/prop, cách viết + ví dụ prompt video, nối
+      cảnh, sửa ảnh, nhận xét, QC…) — bạn xem/sửa/duyệt lại bảng "đoạn → khe" ngay dưới mỗi tài liệu.
+      Tài liệu về quy tắc shot list dùng chung cho MỌI dự án; các tài liệu khác chỉ dùng cho dự án đang
+      mở. Nếu ô "Prompt mẫu" ở mục 3 CÓ dán gì thì nó vẫn được ưu tiên dùng trước; để trống ô đó thì
+      app mới dùng thư viện. Up lại file/dán lại cùng tên tài liệu sẽ ra phiên bản mới, chỉ báo chỗ đổi
+      (chữ "mới/đổi"), chọn lại phiên bản cũ được bất cứ lúc nào. Có 2 tài liệu cùng gán 1 khe thì app
+      báo "⚠ mâu thuẫn" — vẫn dùng cả hai, bỏ tick "Dùng" ở đoạn thừa nếu chỉ muốn giữ một. Tài liệu
+      dài (trên ~6.000 từ) có nút "Rút gọn thành bộ luật" (GPT tự rút gọn) — xem, sửa, bấm "Duyệt" thì
+      mới dùng bản rút gọn (đỡ tốn tiền mỗi lần gọi); chưa duyệt thì app vẫn dùng bản gốc đầy đủ. Mỗi
+      ảnh/prompt/shot list tạo ra đều ghi rõ đã dùng tài liệu nào, phiên bản nào, khe nào (xem trong
+      khung kết quả) — biết chỗ nào cần sửa lại tài liệu nếu kết quả chưa đúng ý.
+      Ở mục "Tập" của từng tập: nếu chưa có shot list, dán kịch bản riêng của tập rồi bấm "Viết shot
+      list (GPT)" — GPT dùng quy tắc trong thư viện, ra shot list tiếng Việt (thoại giữ tiếng Anh) theo
+      đúng khung "# SEQUENCE / ## SHOT / Duration / Framing / Camera / Thoại / Character / SFX / Mood".
+      Đã có shot list sẵn thì dán thẳng vào ô shot list, bỏ qua bước GPT — app tự chia batch theo từng
+      "# SEQUENCE" (không cắt ngang cảnh hay lời thoại). Mỗi batch có ô chọn "Ảnh đơn + sheet / chỉ ảnh
+      đơn / chỉ sheet" gửi kèm khi sinh video — mặc định gửi cả hai (ảnh đơn khoá mặt, sheet chỉ để
+      tham khảo góc/trang phục, không dùng làm khung hình đầu). App tự cảnh báo (không tự cắt) nếu thoại
+      dài hơn thời gian shot.
 
   4 Kho ảnh tham chiếu
       Dán đường dẫn 1 thư mục TRÊN MÁY ĐANG CHẠY APP (không cần tải lên trình duyệt). Trong đó

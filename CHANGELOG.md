@@ -54,3 +54,18 @@
   gốc giữ nguyên; hiện số token ước tính mỗi lần gọi. Mỗi ảnh/prompt tạo ra ghi rõ tài liệu + phiên bản
   đã dùng. Test bằng API giả (`ktoon_tap_thu/tests_mock/knowledge_check.py`, 19 bước) cộng
   `checks_v2.py` + `e2e_v2.py` + `update_check.py` chạy lại đều pass.
+- 2026-09-29 Thư viện kiến thức — bản chốt cho `tap_thu_v2` (docs/SPEC_TAP_THU_V2.md §20, yêu cầu #7 bản
+  chốt, thay cho §19 ở chỗ mâu thuẫn): tải/dán tài liệu không cần gắn loại — "Thủ thư" (GPT việc lặt vặt)
+  tự chia đoạn và gán vào 13 khe (quy tắc shot list — dùng chung mọi dự án, chỉ dẫn hệ thống dự án, mẫu
+  điền việc, ảnh nhân vật/sheet/bối cảnh/prop, cách viết + ví dụ prompt video, nối cảnh, sửa ảnh, nhận
+  xét, QC); owner xem/sửa/duyệt bảng "đoạn → khe", 2 tài liệu cùng khe thì báo mâu thuẫn cho chọn, up lại
+  cùng tên tài liệu chỉ báo chỗ đổi. Kiến thức lưu theo dự án (`KTOON_DATA\projects\<dự án>\kien_thuc`),
+  riêng tài liệu quy tắc shot list là kiến thức chung mọi dự án. Kịch bản → shot list (dùng khe quy tắc
+  shot list, bỏ qua được nếu đã có shot list) → chia batch theo từng "# SEQUENCE" (không cắt ngang cảnh/
+  lời thoại) → viết prompt video tự điền hết {{...}} của mẫu task_form (không bắt owner điền); gửi cả
+  ảnh đơn (khoá mặt) + char sheet (chỉ tham khảo góc/trang phục, không dùng làm khung hình đầu) khi sinh
+  video, chọn được chỉ 1 trong 2 theo từng batch để so sánh. Char sheet theo đúng quyết định của owner
+  (nền trắng đơn, không theo tài liệu nếu tài liệu ghi khác). Cảnh báo (không tự cắt) khi thoại dài hơn
+  shot (2.3 từ/giây + thời gian thở). Ngưỡng rút gọn tài liệu tăng lên ~6.000 từ. Test bằng API giả với 2
+  tài liệu mẫu giống cấu trúc owner đưa (`ktoon_tap_thu/tests_mock/knowledge_check.py`, viết lại thành 55
+  bước) cộng `checks_v2.py` + `e2e_v2.py` + `update_check.py` chạy lại trên instance mới đều pass.

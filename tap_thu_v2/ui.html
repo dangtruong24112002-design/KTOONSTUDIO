@@ -339,20 +339,32 @@ function secTemplates(force) {
     ${T.map(([k, label]) => `<div class="stephead">${esc(label)}</div><textarea data-tpl="${k}" rows="3" placeholder="dán mẫu tiếng Anh ở đây (tuỳ chọn)…">${esc(S.templates[k] || "")}</textarea>
       <div class="row"><button data-act="save-template" data-key="${k}">Lưu mẫu ${esc(label)}</button></div>`).join("")}</section>`, force);
 }
-function kbTypeName(t) { return (S.knowledge_type_name && S.knowledge_type_name[t]) || t; }
+function slotName(k) { return (S.slot_name && S.slot_name[k]) || k; }
 function knowledgeDocCard(doc) {
   const ver = doc.versions.find(v => v.v === doc.current_v) || {};
   const needsCondense = ver.needs_condense;
   const hasCondensed = (ver.condensed_text || "").trim().length > 0;
   const kjs = jobs("condense_knowledge", doc.id), kjl = kjs[kjs.length - 1];
+  const conflicts = new Set(S.knowledge_conflicts || []);
+  const scopeLabel = doc.scope === "global" ? "Chung mọi dự án" : "Dự án này";
   return `<div class="tile"><div class="head"><b>${esc(doc.name)}</b>
-      <span class="chip">v${doc.current_v}/${doc.versions.length} · ${doc.active_word_count} từ · ~${doc.active_token_est} token/lần gọi</span></div>
+      <span class="chip">${scopeLabel} · v${doc.current_v}/${doc.versions.length} · ${ver.word_count || 0} từ · ~${ver.est_tokens || 0} token/lần gọi</span></div>
     <div class="row">
       <label class="fld" style="flex:1 1 140px">Xem lại phiên bản
         <select data-act="kb-set-version" data-id="${doc.id}">${doc.versions.map(v => `<option value="${v.v}" ${v.v === doc.current_v ? "selected" : ""}>v${v.v} · ${esc(v.created)} · ${v.word_count} từ</option>`).join("")}</select></label>
       <button class="link" data-act="kb-remove" data-id="${doc.id}">Xoá tài liệu</button></div>
-    <details><summary>Xem nội dung bản v${doc.current_v}</summary><pre>${esc(ver.text || "")}</pre></details>
-    ${needsCondense ? `<div class="warnbox">Tài liệu dài ${ver.word_count} từ (&gt;${S.condense_word_threshold}) — nên rút gọn để đỡ tốn token mỗi lần gọi.
+    <details><summary>Xem nội dung bản v${doc.current_v}</summary><pre>${esc(ver.raw_text || "")}</pre></details>
+    <div class="stephead">Thủ thư đã gán vào khe nào — sửa/duyệt lại nếu cần (⚠ = đang có tài liệu khác cũng gán khe này)</div>
+    <table class="kbslots"><thead><tr><th>Đoạn tài liệu</th><th>Khe</th><th>Dùng</th></tr></thead><tbody>
+      ${(ver.sections || []).length ? (ver.sections || []).map(sec => `<tr>
+          <td><b>${esc(sec.title)}</b>${sec.changed ? ' <span class="chip">mới/đổi</span>' : ""}<div class="hint">${esc(sec.preview)}</div></td>
+          <td><select multiple size="4" data-act="kb-sec-slots" data-id="${doc.id}" data-sec="${sec.id}">
+            ${(S.slots || []).map(sl => `<option value="${sl}" ${sec.slots.includes(sl) ? "selected" : ""}>${esc(slotName(sl))}${conflicts.has(sl) ? " ⚠" : ""}</option>`).join("")}
+          </select></td>
+          <td style="text-align:center"><input type="checkbox" data-act="kb-sec-approve" data-id="${doc.id}" data-sec="${sec.id}" ${sec.approved ? "checked" : ""}></td>
+        </tr>`).join("") : `<tr><td colspan="3" class="hint">Chưa chia được đoạn nào.</td></tr>`}
+    </tbody></table>
+    ${needsCondense ? `<div class="warnbox">Tài liệu dài ${ver.word_count} từ (&gt;${S.condense_word_threshold}) — có thể rút gọn để đỡ tốn token mỗi lần gọi.
       <div class="row">${itemBtn("condense_knowledge", doc.id, "Rút gọn thành bộ luật (GPT)", hasCondensed)}</div>
       ${kjl && ACTIVE.includes(kjl.status) ? '<span class="spin"></span>Đang rút gọn…' : ""}
       ${kjl && kjl.status === "failed" ? `<div class="err">${esc(kjl.error)}</div>` : ""}</div>` : ""}
@@ -361,32 +373,34 @@ function knowledgeDocCard(doc) {
       <div class="row"><button data-act="kb-save-condensed" data-id="${doc.id}">Lưu chỉnh sửa</button>
         <label class="row" style="width:auto"><input type="checkbox" style="width:auto" data-act="kb-approve-condensed" data-id="${doc.id}" ${ver.condensed_approved ? "checked" : ""}> Đã duyệt — dùng bản này khi chạy</label></div>
       ${ver.condensed_approved ? '<p class="hint">Đang dùng bản rút gọn (đã duyệt) khi chạy; bản gốc vẫn giữ nguyên, xem lại được ở trên.</p>' : '<p class="hint">Chưa duyệt — vẫn đang dùng bản gốc đầy đủ khi chạy.</p>'}` : ""}
-    <div class="stephead">Thêm phiên bản mới cho tài liệu này</div>
+    <div class="stephead">Thêm phiên bản mới cho tài liệu này (Thủ thư sẽ đọc lại và chỉ báo chỗ đổi)</div>
     <div class="uprow"><label class="fld" style="flex:2 1 160px">Tải file mới (.docx .md .txt .xlsx)<input type="file" class="kb-file" data-id="${doc.id}"></label>
       <button data-act="kb-upload-version" data-id="${doc.id}">Tải lên</button></div>
     <textarea rows="3" class="kb-paste-text" data-id="${doc.id}" placeholder="hoặc dán nội dung bản mới ở đây…"></textarea>
     <div class="row"><button data-act="kb-paste-version" data-id="${doc.id}">Lưu bản dán</button></div></div>`;
 }
-function knowledgeNewRow(type_) {
-  return `<div class="tile"><div class="stephead">+ Tài liệu mới (${esc(kbTypeName(type_))})</div>
-    <input class="kb-new-name" data-type="${type_}" placeholder="tên tài liệu (vd: Mẫu shot list #1)">
-    <div class="uprow"><label class="fld" style="flex:2 1 160px">Tải file (.docx .md .txt .xlsx)<input type="file" class="kb-new-file" data-type="${type_}"></label>
-      <button data-act="kb-upload-new" data-type="${type_}">Tải lên</button></div>
-    <textarea rows="3" class="kb-new-text" data-type="${type_}" placeholder="hoặc dán nội dung ở đây…"></textarea>
-    <div class="row"><button data-act="kb-paste-new" data-type="${type_}">Lưu bản dán</button></div></div>`;
+function knowledgeNewRow() {
+  return `<div class="tile"><div class="stephead">+ Tài liệu mới (không cần gắn loại — Thủ thư tự đọc và gán khe)</div>
+    <input class="kb-new-name" placeholder="tên tài liệu (vd: Alpha_Master_Prompts_EN, hoặc để trống = lấy tên file)">
+    <div class="uprow"><label class="fld" style="flex:2 1 160px">Tải file (.docx .md .txt .xlsx)<input type="file" class="kb-new-file"></label>
+      <button data-act="kb-upload-new">Tải lên</button></div>
+    <textarea rows="3" class="kb-new-text" placeholder="hoặc dán nội dung ở đây…"></textarea>
+    <div class="row"><button data-act="kb-paste-new">Lưu bản dán</button></div>
+    <p class="hint">Tải lại file/dán lại với đúng tên một tài liệu đã có sẽ tạo phiên bản mới cho tài liệu đó, không tạo tài liệu trùng.</p></div>`;
 }
 function secKnowledge(force) {
-  updateSec($("#main"), "knowledge", [S.knowledge, S.settings], () => {
-    const types = S.knowledge_types || [];
-    const byType = {};
-    Object.values(S.knowledge || {}).forEach(d => { (byType[d.type] = byType[d.type] || []).push(d); });
+  updateSec($("#main"), "knowledge", [S.knowledge, S.settings, S.knowledge_conflicts], () => {
+    const conflicts = S.knowledge_conflicts || [];
     return `<section class="card"><h1>Thư viện kiến thức</h1>
-      <p class="hint">Thay cho việc dán prompt mẫu từng lần: tải hoặc dán tài liệu mẫu của bạn (shot list, ảnh nhân vật, char sheet,
-      bối cảnh, prop, storyboard, cấu trúc prompt video, style), gắn đúng loại — mỗi bước sẽ tự chèn đúng tài liệu vào lệnh gửi GPT,
-      bám theo đúng cấu trúc/văn phong bạn đưa. Mỗi tài liệu có nhiều phiên bản, xem lại/quay về bản cũ được.
-      Ô "Prompt mẫu" ở mục 3 vẫn dùng được — có thì ưu tiên hơn thư viện này; không có thì app dùng thư viện.</p></section>
-      ${types.map(t => `<section class="card"><h2>${esc(kbTypeName(t))}</h2>
-        <div class="grid">${(byType[t] || []).map(knowledgeDocCard).join("")}${knowledgeNewRow(t)}</div></section>`).join("")}`;
+      <p class="hint">Thay cho việc dán prompt mẫu từng lần: tải hoặc dán tài liệu của bạn (không cần gắn loại) — Thủ thư (GPT việc lặt
+      vặt) tự chia đoạn và gán vào các khe (shotlist_rules, project_system, task_form, ảnh nhân vật/sheet/bối cảnh/prop, cách viết
+      prompt video, ví dụ, nối cảnh, sửa ảnh, nhận xét, QC…), bạn xem/sửa/duyệt lại bảng bên dưới mỗi thẻ tài liệu. Tài liệu về shot
+      list chung (quy tắc viết shot list) dùng chung cho mọi dự án; các tài liệu khác chỉ dùng cho dự án đang mở.
+      Ô "Prompt mẫu" ở mục 3 vẫn dùng được — có thì ưu tiên hơn thư viện này; không có thì app dùng thư viện.</p>
+      ${conflicts.length ? `<div class="warnbox">⚠ Có ${conflicts.length} khe đang được gán bởi nhiều tài liệu khác nhau: ${conflicts.map(slotName).join(", ")}.
+        App vẫn gộp cả hai khi chạy — bỏ tick "Dùng" ở đoạn thừa trong bảng bên dưới nếu bạn muốn chỉ giữ một nguồn.</div>` : ""}
+      </section>
+      <section class="card"><div class="grid">${Object.values(S.knowledge || {}).map(knowledgeDocCard).join("")}${knowledgeNewRow()}</div></section>`;
   }, force);
 }
 function secReflib(force) {
@@ -548,10 +562,23 @@ function secEpShots(eid, force) {
   const el = document.getElementById("sec-epshots-" + eid);
   if (!el) return;
   if (!force && (dirty["epshots-" + eid] || isProtected(el))) { if (!el.querySelector(".dirty") && dirty["epshots-" + eid]) el.insertAdjacentHTML("afterbegin", dirtyBarHtml("epshots-" + eid)); return; }
-  const sig = JSON.stringify([ep.shots, jobs("storyboard").map(j => j.id + j.status + j.file), S.chats, S.picks, S.llm_vision_ok, S.model_catalog]);
+  const sjs = jobs("shotlist_from_script", eid), sjl = sjs[sjs.length - 1];
+  const sig = JSON.stringify([ep.shots, ep.script_raw, ep.shotlist_md, jobs("storyboard").map(j => j.id + j.status + j.file),
+                              S.chats, S.picks, S.llm_vision_ok, S.model_catalog, sjl && sjl.id + sjl.status]);
   if (!force && el.dataset.sig === sig) return;
   el.dataset.sig = sig;
   el.innerHTML = `<section class="card"><h1>Tập ${esc(ep.name)} (${esc(eid)}) <span class="muted">· ${ep.shots.length} shot</span></h1>
+    <p class="hint">Nếu bạn đã có shot list riêng cho tập này thì dán thẳng vào ô dưới (bỏ qua bước viết bằng GPT). Nếu chưa có, dán
+    kịch bản của tập rồi bấm "Viết shot list (GPT)" — GPT dùng quy tắc trong Thư viện kiến thức (khe shotlist_rules).</p>
+    <div class="stephead">Kịch bản riêng của tập ${esc(eid)}</div>
+    <textarea id="epScript-${eid}" rows="6" placeholder="dán kịch bản của tập này…">${esc(ep.script_raw || "")}</textarea>
+    <div class="row"><button data-act="save-ep-script" data-ep="${eid}">Lưu kịch bản tập</button>
+      ${itemBtn("shotlist_from_script", eid, "Viết shot list (GPT)", true)}
+      ${sjl && ACTIVE.includes(sjl.status) ? '<span class="spin"></span>Đang viết…' : ""}</div>
+    ${sjl && sjl.status === "failed" ? `<div class="err">${esc(sjl.error)}</div>` : ""}
+    <div class="stephead">Shot list (định dạng # SEQUENCE / ## SHOT — dán tay hoặc để GPT điền ở trên)</div>
+    <textarea id="epShotlistMd-${eid}" rows="10" placeholder="# SEQUENCE 1: ...\n## SHOT 01: ...\nDuration: 5s\n...">${esc(ep.shotlist_md || "")}</textarea>
+    <div class="row"><button data-act="save-ep-shotlist" data-ep="${eid}">Lưu shot list này (bỏ qua GPT) → tự chia batch theo sequence</button></div>
     <details><summary>Sửa shot list dạng JSON (nâng cao)</summary>
       <textarea id="shotsJson-${eid}" rows="8">${esc(JSON.stringify(ep.shots, null, 1))}</textarea>
       <div class="row"><button data-act="save-shots-json" data-ep="${eid}">Lưu shot list (JSON)</button></div></details></section>
@@ -569,6 +596,10 @@ function secEpBatches(eid, force) {
       <select data-act="batch-model" data-ep="${eid}" data-id="${b.id}">
         <option value="bytedance/seedance-2.5/reference-to-video" ${b.model.includes("2.5") ? "selected" : ""}>Seedance 2.5 ($0.134/s)</option>
         <option value="bytedance/seedance-2.0/reference-to-video" ${b.model.includes("2.0") ? "selected" : ""}>Seedance 2.0 ($0.09/s)</option></select>
+      <select data-act="batch-ref-mode" data-id="${b.id}" title="Tham chiếu nhân vật gửi kèm">
+        <option value="both" ${(b.ref_mode || "both") === "both" ? "selected" : ""}>Ảnh đơn + sheet (mặc định)</option>
+        <option value="single" ${b.ref_mode === "single" ? "selected" : ""}>Chỉ ảnh đơn (face lock)</option>
+        <option value="sheet" ${b.ref_mode === "sheet" ? "selected" : ""}>Chỉ char sheet</option></select>
       <span class="muted">${usd(b.price, 3)}/s</span><span></span></div>`).join("");
   el.innerHTML = `<section class="card"><div class="row between"><h2>8. Chia batch cho tập ${esc(eid)}</h2>
       <button class="primary" data-act="split-batches" data-ep="${eid}">${ep.batches.length ? "Chia lại batch (tự động)" : "Chia batch (tự động)"}</button></div>
@@ -911,6 +942,15 @@ document.addEventListener("click", async e => {
       case "qc-result": { const bid = d.id; const ep = Object.values(S.episodes).find(e => e.qc && bid in e.qc || e.batches.some(b => b.id === bid)); const cur = ((ep.qc || {})[bid] || {}).result; const r = await api("/api/qc", {batch: bid, result: cur === d.v ? null : d.v}); if (r.error) toast(r.error, true); await refresh(); break; }
       case "save-shots-json": { let shots; try { shots = JSON.parse($("#shotsJson-" + d.ep).value); } catch (err) { toast("JSON lỗi: " + err.message, true); break; }
         const r = await api("/api/episode/shots", {ep: d.ep, shots}); delete dirty["epshots-" + d.ep]; if (r.error) toast(r.error, true); else toast("Đã lưu shot list"); await refresh(); break; }
+      case "save-ep-script": {
+        const r = await api("/api/episode/script", {ep: d.ep, text: $("#epScript-" + d.ep).value});
+        delete dirty["epshots-" + d.ep]; if (r.error) toast(r.error, true); else toast("Đã lưu kịch bản tập"); await refresh(); break; }
+      case "save-ep-shotlist": {
+        const text = $("#epShotlistMd-" + d.ep).value;
+        if (!text.trim()) { toast("Chưa có nội dung shot list", true); break; }
+        const r = await api("/api/episode/shotlist", {ep: d.ep, text});
+        delete dirty["epshots-" + d.ep]; delete dirty["epbatches-" + d.ep];
+        if (r.error) toast(r.error, true); else toast("Đã lưu shot list — batch đã chia lại theo sequence"); await refresh(); break; }
       case "split-batches": { const r = await api("/api/episode/batches/split", {ep: d.ep}); if (r.error) toast(r.error, true); else toast("Đã chia batch"); await refresh(); break; }
       case "save-batches-json": { let batches; try { batches = JSON.parse($("#batchesJson-" + d.ep).value); } catch (err) { toast("JSON lỗi: " + err.message, true); break; }
         const r = await api("/api/episode/batches/save", {ep: d.ep, batches}); delete dirty["epbatches-" + d.ep]; if (r.error) toast(r.error, true); else toast("Đã lưu batch"); await refresh(); break; }
@@ -978,17 +1018,17 @@ document.addEventListener("click", async e => {
         const r = await api("/api/knowledge/paste", {id: d.id, text: ta.value});
         if (r.error) toast(r.error, true); else { toast("Đã lưu phiên bản mới"); ta.value = ""; } await refresh(); break; }
       case "kb-upload-new": {
-        const input = document.querySelector(`input.kb-new-file[data-type="${d.type}"]`);
-        const nameEl = document.querySelector(`input.kb-new-name[data-type="${d.type}"]`);
+        const input = document.querySelector("input.kb-new-file");
+        const nameEl = document.querySelector("input.kb-new-name");
         const file = input.files[0]; if (!file) { toast("Chọn file trước", true); break; }
-        const r = await uploadKnowledgeFile({type: d.type, name: nameEl.value.trim()}, file);
-        if (r.error) toast(r.error, true); else toast("Đã thêm tài liệu"); await refresh(); break; }
+        const r = await uploadKnowledgeFile({name: nameEl.value.trim()}, file);
+        if (r.error) toast(r.error, true); else toast("Đã thêm tài liệu — Thủ thư đang gán khe"); await refresh(); break; }
       case "kb-paste-new": {
-        const ta = document.querySelector(`textarea.kb-new-text[data-type="${d.type}"]`);
-        const nameEl = document.querySelector(`input.kb-new-name[data-type="${d.type}"]`);
+        const ta = document.querySelector("textarea.kb-new-text");
+        const nameEl = document.querySelector("input.kb-new-name");
         if (!ta.value.trim()) { toast("Chưa dán gì", true); break; }
-        const r = await api("/api/knowledge/paste", {type: d.type, name: nameEl.value.trim(), text: ta.value});
-        if (r.error) toast(r.error, true); else { toast("Đã thêm tài liệu"); ta.value = ""; nameEl.value = ""; } await refresh(); break; }
+        const r = await api("/api/knowledge/paste", {name: nameEl.value.trim(), text: ta.value});
+        if (r.error) toast(r.error, true); else { toast("Đã thêm tài liệu — Thủ thư đang gán khe"); ta.value = ""; nameEl.value = ""; } await refresh(); break; }
       case "kb-save-condensed": {
         const ta = document.querySelector(`textarea[data-kb-condensed="${d.id}"]`);
         const r = await api("/api/knowledge/condensed", {id: d.id, text: ta.value, approved: false});
@@ -1019,6 +1059,12 @@ document.addEventListener("change", async e => {
       const ta = document.querySelector(`textarea[data-kb-condensed="${d.id}"]`);
       await api("/api/knowledge/condensed", {id: d.id, text: ta ? ta.value : undefined, approved: el.checked});
     }
+    else if (d.act === "kb-sec-slots") {
+      const slots = Array.from(el.selectedOptions).map(o => o.value);
+      await api("/api/knowledge/set_section", {id: d.id, sec_id: d.sec, slots});
+    }
+    else if (d.act === "kb-sec-approve") await api("/api/knowledge/set_section", {id: d.id, sec_id: d.sec, approved: el.checked});
+    else if (d.act === "batch-ref-mode") await api("/api/batch/ref_mode", {id: d.id, mode: el.value});
     else return;
     await refresh();
   } catch (err) { toast("Lỗi: " + err.message, true); }

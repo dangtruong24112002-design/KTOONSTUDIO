@@ -189,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
     def knowledge_upload_file(self, q, raw):
         def one(k, d=""):
             return (q.get(k) or [d])[0]
-        filename, kid, type_, name = one("filename", "file.txt"), one("id"), one("type"), one("name")
+        filename, kid, name = one("filename", "file.txt"), one("id"), one("name")
         try:
             text = P.extract_text(raw, filename)
         except ValueError as e:
@@ -198,8 +198,8 @@ class Handler(BaseHTTPRequestHandler):
             if kid:
                 v = P.add_knowledge_version(kid, text)
                 return {"ok": True, "id": kid, "v": v}
-            doc = P.new_knowledge_doc(type_, name or filename, text)
-            return {"ok": True, "id": doc["id"], "v": doc["current_v"]}
+            doc, v = P.upload_knowledge(name or filename, text)
+            return {"ok": True, "id": doc["id"], "v": v}
         except (ValueError, P.ApiError) as e:
             return {"error": str(e)}
 
@@ -304,8 +304,8 @@ class Handler(BaseHTTPRequestHandler):
             if kid:
                 v = P.add_knowledge_version(kid, str(d.get("text") or ""))
                 return {"ok": True, "id": kid, "v": v}
-            doc = P.new_knowledge_doc(d.get("type"), str(d.get("name") or "").strip(), str(d.get("text") or ""))
-            return {"ok": True, "id": doc["id"], "v": doc["current_v"]}
+            doc, v = P.upload_knowledge(str(d.get("name") or "").strip(), str(d.get("text") or ""))
+            return {"ok": True, "id": doc["id"], "v": v}
         if path == "/api/knowledge/set_version":
             P.set_knowledge_version(d.get("id"), d.get("v"))
             return {"ok": True}
@@ -314,6 +314,19 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True}
         if path == "/api/knowledge/condensed":
             P.set_condensed(d.get("id"), d.get("text"), bool(d.get("approved")))
+            return {"ok": True}
+        if path == "/api/knowledge/set_section":
+            P.set_section_slots(d.get("id"), d.get("sec_id"), d.get("slots"), d.get("approved"))
+            return {"ok": True}
+        if path == "/api/episode/script":
+            P.episode(d.get("ep"))["script_raw"] = str(d.get("text") or "")
+            P.save()
+            return {"ok": True}
+        if path == "/api/episode/shotlist":
+            P.apply_shotlist_md(d.get("ep"), str(d.get("text") or ""))
+            return {"ok": True}
+        if path == "/api/batch/ref_mode":
+            P.set_batch_ref_mode(d.get("id"), str(d.get("mode") or "both"))
             return {"ok": True}
         if path == "/api/approve":
             P.set_approved(d.get("bank"), d.get("id"), bool(d.get("approved")))
@@ -374,7 +387,8 @@ class Handler(BaseHTTPRequestHandler):
                 eid = d.get("ep")
                 if eid not in STATE["episodes"]:
                     return {"error": "Không có tập này."}
-                STATE["episodes"][eid]["batches"] = P.split_batches(eid)
+                ep = STATE["episodes"][eid]
+                ep["batches"] = P.split_batches_by_sequence(eid) if ep.get("shotlist_md", "").strip() else P.split_batches(eid)
             P.save()
             return {"ok": True}
         if path == "/api/episode/batches/save":

@@ -567,3 +567,125 @@ that a knowledge doc feeds a real job's prompt when no template is set and that 
 one is set, that a long document is flagged and condensing measurably shrinks the injected text (checked
 by comparing a `prompt` stage's dry-run price estimate before/after approval), and that removal works.
 `checks_v2.py`/`e2e_v2.py`/`update_check.py` all still pass unchanged.
+
+## 20. Addendum #7 bản chốt (2026-09-29) — slot-based knowledge library + task_form auto-fill (supersedes §19)
+
+The owner's final word on the knowledge library (yêu cầu #7, "bản chốt"). Where this section conflicts
+with §19's type-tagged design, §20 wins; §19's data shape (`STATE["knowledge"]["docs"][kid]["type"]`,
+`KNOWLEDGE_TYPES`, `knowledge_context()`) is removed and replaced outright, not kept alongside it.
+
+Project used to size the two sample fixture documents in the test suite: "The Alpha's Human Bride" (60
+episodes).
+
+1. **Storage scope.** Knowledge is per-project by default: `KTOON_DATA/projects/<dự án>/kien_thuc/<doc
+   id>/vN.txt` (mirrored to disk for the owner to see; `state.json` stays the source of truth, same as
+   every other piece of app state). The one exception the owner named — the Shotlist Instruction document
+   — is shared knowledge, not tied to one project: any doc whose approved sections resolve ONLY into the
+   `shotlist_rules` slot (see item 1 below) is stored under `KTOON_DATA/kien_thuc_chung/<doc id>/vN.txt`
+   instead, and its content is available to every project. `pipeline.py`: `GLOBAL_SLOTS = {"shotlist_rules"}`,
+   `_infer_scope(sections)`, `knowledge_global_dir()`/`knowledge_project_dir()`/`_doc_dir(doc)`.
+2. **Upload with no type tag — the "Thủ thư" (librarian).** `/api/knowledge/upload_file` and
+   `/api/knowledge/paste` take only a file/text and an optional `name`; the owner never picks a type.
+   `librarian_run(kid)`:
+   - Structural split first, free: `_split_by_headers(text)` looks for `#`/`##`/`§ N`/`Section N`/
+     `Master 0N` header lines and cuts the document there. A document with fewer than 2 such lines (no
+     real structure) falls through to one misc-LLM call (`KB_SPLIT_SYS`, job kind `kb_split` folded into
+     the same `kb_librarian` job) that returns `{"sections": [{"title","text"}, ...]}`, told to keep every
+     word somewhere and never summarize.
+   - Slot classification: a keyword table (`_SLOT_KEYWORDS`) matches a section's title against the
+     patterns the owner's own examples imply (`"Master 0N"` → the matching image/video slot, `"§2"`/
+     `"§3"`/`"project instruction"` → `project_system`, `"§4"`/`"reusable task input"` → `task_form`,
+     `"§12"`/`"qc checklist"` → `qc_checklist`, `"continue clip"`/`"repair image"`/`"review result"` for
+     §11's sub-parts, `"master instruction"`/`"cinematic literary shotlist workflow"` → `shotlist_rules`).
+     Only a section the keyword table cannot place at all gets escalated to one misc-LLM call
+     (`KB_CLASSIFY_SYS`) — batched as a single call covering every ambiguous section in the doc, never one
+     call per section (hard rule #8: batch LLM reasoning into few calls). Any LLM calls `librarian_run`
+     makes are logged as a real `kb_librarian` job/ledger entry with their measured cost, and are skipped
+     (with the section left for the owner to file by hand) once `spent + reserved` is within $0.05 of the
+     budget cap — a knowledge upload can never silently blow through the cap (hard rule #1).
+   - The result is a table, one row per section: title + a preview, the slot(s) assigned (a multi-select,
+     editable), and an "approved" checkbox (`set_section_slots`, `/api/knowledge/set_section`) — the owner
+     edits/approves it, exactly as asked. One section can be filed under several slots (used for `§2`+`§3`
+     both landing in `project_system`).
+   - Re-uploading a file/paste under the SAME name (case-insensitive) is a new version of that doc, not a
+     duplicate (`upload_knowledge`); the librarian re-runs and each section carries a `changed` flag versus
+     the previous version's same-titled section, so the UI can highlight just what changed. Versions and
+     rollback (`set_knowledge_version`) work exactly as in §19.
+   - A slot claimed by an approved section in more than one different doc is a conflict
+     (`slot_conflict(slot_key)`, surfaced as `knowledge_conflicts` in `/api/state`) — the app still combines
+     all of them by default (never blocks), and the owner resolves it by unchecking "approved" on the one
+     that should stop counting, using the very same table.
+3. **The slots** (`SLOTS`/`SLOT_NAME` in `pipeline.py`), replacing §19's 8 types: `shotlist_rules`,
+   `project_system`, `task_form`, `img_char_single`, `img_char_sheet`, `img_location`, `img_prop`,
+   `video_writer`, `video_example`, `continue_clip`, `repair_image`, `review_result`, `qc_checklist`.
+   `project_system` is prepended to the system prompt of every LLM step that writes a prompt or reviews/
+   critiques one (image-prompt writing via `template_prompt()`, video-prompt writing, `review`, `critique`)
+   — not just the step whose own dedicated slot it is. `resolve_prompt_source(template_key, slot_key)`
+   keeps §15 A.3's priority: the owner's saved "Prompt mẫu" template wins if set, the knowledge library's
+   slot text otherwise. A document under ~6000 words (`CONDENSE_WORD_THRESHOLD`, raised from §19's 3000) is
+   always sent whole; longer ones get the same condense-and-approve gate as §19 item 3.
+4. **Script → shot list → sequence-based batch → video-prompt task_form (the two-tier flow).**
+   - `shotlist_from_script` (new stage, target = one episode id): system = the `shotlist_rules` slot's
+     text (falls back to a built-in `SHOTLIST_FROM_SCRIPT_SYS` only when that slot is still empty); user =
+     the episode's own `script_raw` (`/api/episode/script`). Output is a Vietnamese shot list, English
+     dialogue kept as-is, in the exact format the owner specified: `# SEQUENCE n: <title>` blocks, each
+     holding `## SHOT NN` entries with Duration/Framing/Camera/Thoại/Character/SFX/Mood, ending with
+     SOURCE/CONTINUITY NOTE lines. Skippable: if the owner already has a shot list for the episode, paste
+     it straight into `/api/episode/shotlist` and this LLM step is never called.
+   - `parse_shotlist_md(text)` reads that exact markdown (`# SEQUENCE`/`## SHOT`/field lines) with regexes,
+     no LLM; a shot missing `Duration` gets one estimated from its own dialogue (`dialogue_fits`'s formula,
+     below), never left blank. `apply_shotlist_md()` turns the parse into the episode's existing `shots`
+     JSON list (so every other screen — QC, export, storyboard — keeps working unchanged) plus a NEW
+     sequence-aware batch splitter, `split_batches_by_sequence()`: shots are grouped in order, a group ends
+     when the `# SEQUENCE` changes or adding the next shot would push it over 30s — it never crosses a
+     sequence boundary and, because a shot is always kept whole, it never splits a beat's own dialogue
+     either. `/api/episode/batches/split` picks this splitter automatically whenever the episode has a
+     `shotlist_md`, and falls back to §15 B.8's location-based `split_batches()` otherwise.
+   - Writing each batch's video prompt (`run_llm`'s `prompt` kind) assembles system = `project_system` +
+     `video_writer` (owner template `video_structure` still wins if set) + `continue_clip` (only for a
+     batch that follows another one) + `video_example`, and asks the LLM to always end with the verbatim
+     Prohibited line. The user message is `task_form` (owner template, else the slot, else a built-in
+     fallback with the same field names) with every `{{FIELD}}` filled in by the app itself
+     (`_fill_task_form()`/`_fill_task_form_text()`) — `DELIVERABLE=VIDEO`, `EPISODE_AND_SHOTS`,
+     `APPROVED_SOURCE_EXCERPT` (the batch's own shot lines, verbatim), `REFERENCE_MAP` (from
+     `build_mapping()`, item 5 below), `START_STATE` (the previous batch's own "END STATE" line if it wrote
+     one, else its prompt's tail), `OUTPUT_SETTINGS` (9:16 + the batch's duration), `OUTPUT_MODE=
+     READY_PROMPT_ONLY`, `TOOL_LIMITS` (the batch's chosen model's known caps). The owner never sees or
+     fills a `{{...}}` themselves; if the app truly cannot compute a field the task_form document asks for,
+     the job fails with a clear "app không tự điền được, cần bạn bổ sung" error naming the field, rather
+     than guessing. A batch that continues another one and whose predecessor has no finished video yet
+     fails the same clear way, naming the predecessor, instead of silently omitting `START_STATE`.
+5. **Reference images sent to Seedance (`build_mapping()`).** Every character in a batch now gets BOTH
+   an approved single portrait (labeled "face lock … identity/face reference only") and an approved
+   character sheet (labeled "turnaround sheet … NEVER a starting frame") by default — never the sheet
+   alone. Each batch has a `ref_mode` (`"single"|"sheet"|"both"`, default `"both"`), settable per batch via
+   `/api/batch/ref_mode` for the owner to compare; `REFERENCE_MAP` always states each reference's exact
+   scope so the LLM (and the owner reading the prompt) knows the sheet is for costume/angles only.
+6. **Char sheet background — owner override.** The owner's decision (solid white, not Master 02's warm-
+   grey) is passed to the LLM as an explicit, unmissable override on top of whatever the `img_char_sheet`
+   slot document says (`template_prompt(..., override=...)`), not just left to hope the model reads the
+   template correctly.
+7. **Dialogue-duration check.** `dialogue_fits(dialogue, seconds)` = `len(dialogue.split()) / 2.3 +
+   1.0`s (`DIALOGUE_WPS`/`DIALOGUE_BUFFER_S`) compared against the shot/batch's own duration;
+   `batch_dialogue_warnings()` surfaces a `⚠` on the `prompt` stage's dry-run label when a shot's dialogue
+   would need more time than it has. A check only — nothing is ever auto-cut.
+8. **Provenance.** Every job that used a knowledge-library slot records `{"slot": key, "id": doc_id, "name":
+   doc_name, "v": version}` per slot it drew from, in the same `knowledge_used` field §19 introduced — now
+   keyed by slot instead of type, and covering every step listed in item 3, not just image/video-prompt
+   writing.
+
+New/changed API routes over §19: `/api/knowledge/upload_file` and `/api/knowledge/paste` drop `type`;
+`/api/knowledge/set_section` (edit/approve a section's slots); `/api/episode/script` and
+`/api/episode/shotlist` (paste a script or a ready-made shot list for one episode); `/api/batch/ref_mode`.
+
+Tested purely against the mock, with two sample documents shaped like the owner's real ones — a
+shotlist-workflow doc with no header structure (forces the LLM split + LLM classify fallback) and a
+project doc with `§2`/`§3`/`§4`/`Master 01-06`/`§11` sub-parts/`§12` headers (pure heuristic, zero LLM
+cost) — in `ktoon_tap_thu/tests_mock/knowledge_check.py` (55 checks, rewritten in place — supersedes the
+§19-era version of this file): no-type upload and auto-slotting, scope inference (global vs. project),
+diff-on-reupload + rollback, a slot conflict between two docs and resolving it by hand, condense-and-
+approve's price delta, on-disk storage location for both scopes, the shot-list→sequence-batch pipeline
+including the missing-Duration estimate and the dialogue-duration warning, the dual-reference `ref_mode`
+toggle, the char-sheet white-background override actually reaching the model, task_form auto-fill, and the
+continuation guard's clear failure message. `checks_v2.py`/`e2e_v2.py`/`update_check.py` all still pass
+unchanged on a fresh instance.
