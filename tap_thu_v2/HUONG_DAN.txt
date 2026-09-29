@@ -1,0 +1,101 @@
+TẬP THỬ V2 — KTOONSTUDIO (1 trang: series -> danh sách tập, Omni Reference)
+==============================================================
+Cần: Python 3 (Windows: cài từ python.org, tick "Add python.exe to PATH")
+     ffmpeg (để cắt khung hình sửa lỗi và ghép video — không có vẫn dùng được phần còn lại)
+     Tài khoản WaveSpeed (ảnh + LLM) và Atlas Cloud (video) đã nạp tiền.
+
+BƯỚC 1 — Dán key
+  Mở keys.txt (cùng thư mục với app; nếu chưa có, app tự tạo file trống khi mở lần đầu).
+  Dán key WaveSpeed và Atlas vào sau dấu =, sửa BUDGET_USD nếu muốn (mặc định $18; lần thử đầu
+  tiên có thể tăng lên ~$30 vì còn tốn tiền làm ảnh tham chiếu và đo giá thật). Lưu lại.
+  Không dán key vào chat, không chụp màn hình file này.
+
+BƯỚC 2 — Mở app
+  Windows: bấm đúp chay_windows.bat
+  Mac:     chuột phải chay_mac.command > Open
+  Trình duyệt tự mở trang http://127.0.0.1:8890 (hoặc cổng gần đó nếu đang bận).
+  Giữ cửa sổ đen mở trong lúc dùng. Đóng nó là tắt app; việc đang gửi sẽ tiếp tục khi mở lại.
+
+BƯỚC 3 — Làm theo đúng thứ tự trên 1 trang (trang dài, cuộn xuống hoặc bấm hàng nút "nhảy nhanh"
+         ngay dưới đầu trang để tới thẳng từng mục)
+
+  PHẦN SERIES (làm 1 lần, dùng chung cho mọi tập)
+  1 Kịch bản + shot list
+      Tải file (.txt .md .docx .xlsx .csv) hoặc dán trực tiếp kịch bản + shot list bạn đã có.
+      PDF: mở file, copy nội dung, dán vào ô text (app không đọc PDF trực tiếp).
+      Bấm "Tách thành các tập (GPT)" — GPT tự nhận ra EP01, EP02... và GIỮ NGUYÊN số shot/mô
+      tả/thoại/thời lượng bạn đã viết; chỉ tự viết thêm shot khi bạn không dán gì.
+  2 Danh sách nhân vật/bối cảnh/prop/style
+      Tải file hoặc dán danh sách. Bấm "Đọc danh sách (GPT)" — tách ra từng nhân vật, bối cảnh,
+      prop và 1 khối "style" chung. Nếu không có file này, để trống và bấm "Hoặc: tự đề xuất từ
+      kịch bản (GPT)" để GPT tự liệt kê từ kịch bản ở mục 1.
+      Mục nào có chữ "chưa duyệt" thì bấm "Duyệt" trước khi tạo ảnh (chưa duyệt = chưa tốn tiền).
+  3 Prompt mẫu
+      Dán mẫu tiếng Anh của bạn cho: ảnh đơn nhân vật nền trắng, char sheet 21:9, ảnh bối cảnh,
+      ảnh prop, tài liệu cấu trúc viết prompt video, prompt video mẫu. GPT sẽ viết đúng cấu trúc/
+      văn phong của mẫu, chỉ thay nội dung; khối style ở mục 2 luôn được chèn thêm vào. Để trống
+      thì GPT tự viết theo kiểu chung chung.
+  4 Kho ảnh tham chiếu
+      Dán đường dẫn 1 thư mục TRÊN MÁY ĐANG CHẠY APP (không cần tải lên trình duyệt). Trong đó
+      tạo 2 thư mục con: AI\ (ảnh AI — dùng được cho mặt) và THAT\ (ảnh người thật — chỉ dùng
+      trang phục/tóc/dáng/tư thế, TUYỆT ĐỐI KHÔNG dùng cho mặt/mắt — app tự chặn). Bấm "Quét ảnh
+      mới" 1 lần; lần sau chỉ quét ảnh mới thêm vào, không quét lại ảnh cũ.
+  5 Nhân vật — bấm "Gợi ý ảnh từ kho ref (GPT)" trong từng thẻ nhân vật để GPT tự chọn tối đa ~6
+      ảnh thành phần hợp trong kho mục 4 (xem/đổi/bỏ tay trước khi tạo ảnh thật), hoặc tải tay.
+      Rồi bấm 2 nút 1-lần-cho-tất-cả: "Tạo ảnh đơn tất cả nhân vật", "Tạo char sheet cho nhân vật
+      đã duyệt". Mỗi ảnh có khung "Chat sửa ảnh" riêng — gõ yêu cầu (tiếng Việt được), chọn model
+      sửa, bấm Gửi; mỗi lần sửa ra bản mới (v2, v3…), bấm vào bản cũ trong dãy "t1 t2 t3…" để chọn
+      lại. Nút "Nhận xét ảnh" cho GPT chỉ lỗi, không tốn tiền sửa ảnh.
+  6 Bối cảnh / 7 Prop — tương tự: mô tả tiếng Anh, "Tạo ảnh bối cảnh (wide) — tất cả" / "Tạo ảnh
+      prop — tất cả", góc ngược tuỳ chọn riêng từng bối cảnh.
+      (Giọng, Video ref nằm ngay dưới — tải file tham chiếu, không tốn tiền AI.)
+
+  PHẦN TỪNG TẬP (lặp lại cho mỗi EP01, EP02...)
+  8 Chia batch cho tập — gom các shot liên tiếp cùng bối cảnh thành 1 batch, tối đa 30s (Seedance
+      2.5) hoặc 15s (2.0). Batch đầu (hook) và cuối (cliffhanger) mặc định 2.5; batch giữa mặc
+      định 2.0 — đổi model ngay trong bảng, hoặc gộp/tách bằng tay ở khung JSON nâng cao bên dưới.
+  9 Viết prompt tất cả batch (GPT), rồi Gemini tự rà soát. Sửa tay và tick "Đã duyệt" — phải duyệt
+      mới sinh video được.
+  10 Gen video hàng loạt — gửi mọi batch đã duyệt trong 1 lần xác nhận; batch cần khung hình cuối
+      của batch trước sẽ tự chờ (bấm lại nút khi batch trước đã xong để gửi tiếp). Tối đa 2 lần tạo
+      đầy đủ mỗi batch (đổi được trong dữ liệu cài đặt); hết lượt thì dùng mục 11 để vá từng đoạn.
+      Tick 3 ô QC (nét/đúng người, raccord đúng, giọng/khẩu hình hợp), Pass hoặc Fail.
+  11 Sửa đoạn hỏng — chọn batch + giây bắt đầu/kết thúc (4-10s) của đoạn hỏng, cắt khung hình (cần
+      ffmpeg), gõ mô tả cần sửa, "Tạo ảnh sửa", duyệt, rồi "Vá đoạn này".
+  12 Xuất — copy các clip đã chọn của tập này vào export/EP<nn>/ theo thứ tự + danh_sach.txt. Ghép
+      1 file MP4 nếu máy có ffmpeg và đã có đủ các clip của tập.
+  13 Chi phí — chi đã dùng, thực chi theo số dư, chiếu ×60 tập ra VND — tách riêng "làm 1 lần cho
+      cả series" (đọc danh sách/ảnh nhân vật/bối cảnh/prop) và "lặp lại mỗi tập" (prompt/storyboard/
+      video), vì chỉ phần lặp lại mỗi tập mới nhân 60. Mỗi lần chạy, app hiện chi phí dự tính và hỏi
+      lại trước khi tiêu tiền thật.
+
+  Mẹo: đang gõ dở ở 1 khung (vd kịch bản) mà bấm nút ở chỗ khác trên trang thì khung đang gõ KHÔNG
+  bị ghi đè — app chỉ tạm ngưng tự làm mới đúng khung đó, bấm nút "Làm mới phần này" (hoặc Lưu) khi
+  gõ xong.
+
+CHI PHÍ
+  Trần mặc định $18/tập (BUDGET_USD trong keys.txt). Tối đa 2 lần tạo đầy đủ mỗi batch, sau đó chỉ
+  còn sửa từng đoạn 4-10s. Lần tạo video đầu tiên của mỗi model (2.5 và 2.0) tự "đo giá thật" bằng
+  cách đọc số dư Atlas trước/sau — nếu giá đo được của 2.5 vượt $0.16/giây, app tự cảnh báo và có thể
+  đổi các batch 2.5 chưa tạo sang 2.0 (đổi lại được ở mục model trong bảng batch của từng tập).
+  Chi tiết từng lần gọi: output/so_chi.csv   Nhật ký: output/nhat_ky.txt
+
+KHI CÓ LỖI
+  Lỗi hiện ngay dưới mục liên quan. Gửi Claude dòng lỗi, hoặc gửi file output/nhat_ky.txt (không chứa
+  key). Đóng app giữa chừng cũng không sao: mở lại là việc đã gửi (ảnh/video) chạy tiếp, không bị tính
+  tiền lại. Việc gọi LLM (tách tập, đọc danh sách, prompt...) bị tắt giữa chừng thì mất, bấm tạo lại
+  (chưa bị tính tiền vì tiền chỉ ghi sau khi có kết quả).
+
+CẦN KIỂM TRA Ở LẦN CHẠY KEY THẬT ĐẦU TIÊN (xem thêm docs/SPEC_TAP_THU_V2.md §12 và §15)
+  - Giá thật ở 720p của Seedance 2.5 và 2.0 reference-to-video (app tự đo, xem mục Gen video & QC).
+  - Endpoint/khuôn dạng upload file của Atlas (app đang tải file lên qua WaveSpeed rồi dùng URL đó
+    cho cả WaveSpeed và Atlas — cần xác nhận Atlas nhận URL ngoài).
+  - Cú pháp @Image trong prompt Seedance 2.0 (trang model ghi "image 1", chưa rõ @Image1 có chạy không).
+  - Trường trả về khung hình cuối (return_last_frame) — app đang thử vài tên trường phổ biến.
+  - WaveSpeed LLM có nhận ảnh đính kèm không (ảnh hưởng nút "Nhận xét ảnh", chat sửa ảnh có đính
+    kèm ảnh mẫu, và việc quét/gắn nhãn kho ảnh tham chiếu ở mục 4) — nếu không nhận, app tự chuyển
+    sang gắn nhãn theo tên file/thư mục và ẩn nút "Nhận xét ảnh".
+  - Tên model và giá thật của "GPT Image" bản edit trên WaveSpeed (mục Chat sửa ảnh) — hiện đang để
+    tạm openai/gpt-image-1/edit, giá tạm $0.19, CẦN xác nhận lại với trang giá của WaveSpeed.
+  - Prompt hook có yếu tố gợi cảm (không lộ) có bị model chặn không.
+  - URL file trả về sống được bao lâu (app tải về máy ngay, nhưng nên biết để tránh lỗi khi thử lại).

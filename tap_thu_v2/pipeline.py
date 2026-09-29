@@ -1,0 +1,2010 @@
+"""Trạng thái + logic nghiệp vụ cho tap_thu_v2 (không có HTTP server ở đây, xem app.py).
+Luồng theo docs/SPEC_TAP_THU_V2.md §15 (ưu tiên hơn §1-§14 khi mâu thuẫn):
+series (kịch bản+shot list, danh sách nhân vật/bối cảnh/prop+style, prompt mẫu, kho ref) ở trên,
+danh sách tập (mỗi tập: shot list riêng, batch gen, prompt, video, QC, sửa lỗi, xuất) ở dưới.
+
+Một "job" là một việc tốn tiền hoặc gọi LLM, chạy nền, có thể Resume sau khi tắt app.
+Một file owner tải lên/tự có sẵn (component, sheet có sẵn, giọng, video ref, ảnh trong kho ref...)
+cũng được ghi thành một "job" giả, provider="local", cost=0, status="done" ngay — để dùng chung máy
+chọn phiên bản (takes/pick) với ảnh video do máy tạo ra. Chỉ "components" của nhân vật là danh sách
+nhiều item (không phải kiểu chọn 1 bản), vì một nhân vật cần nhiều ảnh thành phần cùng lúc.
+"""
+import csv
+import io
+import json
+import mimetypes
+import os
+import re
+import shutil
+import subprocess
+import threading
+import time
+import traceback
+import xml.etree.ElementTree as ET
+import zipfile
+from datetime import datetime
+from pathlib import Path
+
+import providers
+from providers import ApiError
+
+HERE = Path(__file__).resolve().parent
+OUT = HERE / "output"
+PROJECTS = HERE / "projects"
+STATE_FILE = OUT / "state.json"
+LEDGER = OUT / "so_chi.csv"
+LOG_FILE = OUT / "nhat_ky.txt"
+
+# The KTOON_* overrides exist only for the offline test harness (tests_mock/run_env_v2.sh).
+WS_BASE = os.environ.get("KTOON_WS_BASE", "https://api.wavespeed.ai/api/v3")
+WS_LLM_BASE = os.environ.get("KTOON_WS_LLM", "https://llm.wavespeed.ai/v1")
+ATLAS_BASE = os.environ.get("KTOON_ATLAS_BASE", "https://api.atlascloud.ai/api/v1/model")
+ATLAS_PUB_BASE = os.environ.get("KTOON_ATLAS_PUB", "https://api.atlascloud.ai/public/v1")
+POLL_SLEEP = float(os.environ.get("KTOON_POLL", "0.4"))
+MEASURE_WAIT = float(os.environ.get("KTOON_MEASURE_WAIT", "0.3"))
+PRICE_WARN_PER_S = 0.16
+KEY_OF = {"wavespeed": "WAVESPEED_API_KEY", "atlas": "ATLASCLOUD_API_KEY"}
+PROVIDER_NAME = {"wavespeed": "WaveSpeed", "atlas": "Atlas Cloud"}
+VND_PER_USD = 26170
+TARGET_VND = 30_000_000
+CONTRACT_VND = 50_000_000
+N_EPISODES = 60
+
+IMAGE_PRICE = {"1k": 0.14, "2k": 0.14, "4k": 0.24}
+COMPONENT_USES = ["face", "eyes", "hair", "costume", "body", "pose", "other"]
+TIER_MODEL = {"hook": "bytedance/seedance-2.5/reference-to-video", "cliffhanger": "bytedance/seedance-2.5/reference-to-video",
+              "key": "bytedance/seedance-2.5/reference-to-video", "normal": "bytedance/seedance-2.0/reference-to-video"}
+TIER_PRICE = {"hook": 0.134, "cliffhanger": 0.134, "key": 0.134, "normal": 0.09}
+TIER_MAXDUR = {"hook": 30, "cliffhanger": 30, "key": 30, "normal": 15}
+TIER_NAME = {"hook": "hook", "cliffhanger": "cliffhanger", "key": "key (2.5)", "normal": "normal"}
+
+DEFAULT_SETTINGS = {
+    "llm_write": "openai/gpt-5.5", "llm_write_in": 5.0, "llm_write_out": 30.0,
+    "llm_review": "google/gemini-3.6-flash", "llm_review_in": 0.75, "llm_review_out": 3.8,
+    "image_resolution": "2k", "sheet_resolution": "2k",
+    "storyboard_model": "bytedance/seedream-v5.0-flash/edit", "storyboard_price": 0.027,
+    "resolution": "720p", "max_full_gens": 2, "max_edits_per_image": 10, "parallel": 2,
+}
+STAGE_NAME = {"split_episodes": "Tách kịch bản thành các tập", "parse_list": "Đọc file danh sách",
+              "preprod": "Đề xuất danh sách tiền kỳ", "reflib_scan": "Quét kho ref",
+              "suggest_components": "Gợi ý ảnh thành phần",
+              "portrait": "Ảnh nhân vật", "sheet": "Sheet 21:9", "env_wide": "Ảnh bối cảnh",
+              "env_rev": "Bối cảnh (góc ngược)", "prop": "Ảnh prop", "voice": "Giọng", "video_ref": "Video ref",
+              "storyboard": "Storyboard", "frame": "Cắt khung hình", "fix_img": "Ảnh sửa", "prompt": "Prompt",
+              "review": "Duyệt prompt (Gemini)", "gen": "Sinh video", "patch": "Vá đoạn", "critique": "Nhận xét ảnh"}
+LLM_KINDS = {"split_episodes", "parse_list", "preprod", "reflib_scan", "suggest_components", "prompt", "review", "critique"}
+IMAGE_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "fix_img", "storyboard"}
+EDITABLE_IMAGE_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "storyboard"}
+VIDEO_KINDS = {"gen", "patch"}
+SERIES_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "preprod", "parse_list"}
+
+PROHIBITED = ("no subtitles, no BGM (unless explicitly requested), no exaggerated movements, no extra dialogue, "
+              "no runny nose or premature tears, no AI-feel artifacts, no fast cuts when the shot is one continuous take")
+
+SHOT_SCHEMA = ('{"id": "SH01", "duration": int (4-15 seconds), "location": "short location name", '
+               '"cast": ["character name", ...], "props": ["prop name", ...], '
+               '"desc": "English action/camera description of this shot", '
+               '"speaker": "character name or empty string", "line": "English dialogue or empty string"}')
+
+SPLIT_EPISODES_SYS = """You receive a script and/or shot list for a vertical 9:16 microdrama series, possibly
+covering several episodes in one document. Return ONLY one JSON object:
+{"episodes": [{"id": "EP01", "name": "short episode title or empty string", "shots": [shot, ...]}, ...]}
+where shot = """ + SHOT_SCHEMA + """
+Rules:
+- Split into episodes wherever the text marks a new one (headings like "EP01", "Episode 2", "Tap 3", a
+  clear scene-count reset, or an explicit episode break). If you cannot find any such marker, treat the
+  whole input as ONE episode (return a single-item "episodes" list).
+- Within one episode, if the input already contains a shot list (prose list or a table), you are a PARSER,
+  not a writer: keep exactly the same number of shots, the same order and the same content for that
+  episode, only reshaping it into the JSON schema above (guess a sane 4-15s duration only if none was given).
+  Never add, remove, merge or drop a shot the input gave you.
+- Only invent a fresh shot list yourself (16-20 shots, ~90s total, natural short American-English dialogue)
+  for an episode whose text has a screenplay/script but no explicit shot list.
+- Number episode ids in order starting at EP01, regardless of what the input calls them."""
+
+PARSE_LIST_SYS = """You receive an uploaded/pasted file listing characters, environments, props and a shared
+visual style for a photoreal vertical 9:16 microdrama series. Return ONLY one JSON object:
+{"characters": [{"name": str, "desc": "English: age, look, wardrobe, personality"}],
+ "environments": [{"name": str, "tag": "INT"|"EXT", "time": "day"|"night", "desc": "English set description"}],
+ "props": [{"name": str, "desc": "English one-line description"}],
+ "style": "the ONE shared style block from the file (e.g. 'ultra realistic 8K Hollywood film...'), in English"}
+You are a PARSER: split the given text into these groups faithfully, keep the owner's own wording for
+descriptions where given (translate to English only if the source is not English), and do not invent
+characters/environments/props/style that are not in the text. If the file uses a table, read it as a table."""
+
+PREPROD_SYS = """You are a production coordinator. From the screenplay, propose the Reference Bank's
+characters, environments and props for a photoreal vertical 9:16 microdrama. Return ONLY one JSON object:
+{"characters": [{"name": str, "desc": "English: age, look, wardrobe, personality"}],
+ "environments": [{"name": str, "tag": "INT"|"EXT", "time": "day"|"night", "desc": "English set description: light, palette, key dressing"}],
+ "props": [{"name": str, "desc": "English one-line description"}]}
+Only include characters/props/locations that actually appear in the material. Keep descriptions short (1-2
+sentences), specific, and filmable."""
+
+REFLIB_TAG_SYS = """You look at one reference image from a character-asset library for an AI video production.
+Return ONLY one JSON object: {"label": "short English description, 4-10 words", "use": "face"|"eyes"|"hair"|
+"costume"|"body"|"pose"|"other"}. Pick the single "use" tag that best matches what this image is most useful
+for as a reference component."""
+
+SUGGEST_COMPONENTS_SYS = """You pick reference-component images for one AI-generated character from a tagged
+library. You are given the character's description and a numbered list of available images, each with its
+folder source (ai or real) and its use tag. Return ONLY one JSON object: {"picks": [index, ...]}, at most 6
+indices, best matching the character's description. HARD RULE: never pick an image whose source is "real"
+and whose use is "face" or "eyes" — skip those entirely, even if they otherwise match well."""
+
+TEMPLATE_FILL_SYS = """You fill in an image-generation prompt template for an AI photoreal vertical 9:16
+microdrama production, in ENGLISH. Keep the template's exact structure, section order and voice; only
+replace the scene/item-specific placeholders with the given item's own details. Always work the shared
+style block given to you into the result (append it if the template does not already have a place for it).
+If no template is given, just write a clean, complete prompt from the item info and style block yourself,
+following standard photoreal AI-image prompting practice. Output the final prompt as plain text only, no
+preamble, no markdown, no quotes."""
+
+REWRITE_SYS = """You turn a short user request (Vietnamese or English) for editing ONE existing AI-generated
+image into a precise ENGLISH image-edit instruction for an image-edit model. Always state that identity/face,
+aspect ratio and background must stay unchanged except for what the user asked to change. Be concrete and
+literal; do not add creative flourishes the user did not ask for. Output the instruction as plain text only,
+one paragraph, no preamble, no quotes."""
+
+CRITIQUE_SYS = """You look at one reference image for an AI video production (a character sheet, an environment
+still, a prop, or a storyboard frame) and list concrete problems only: a missing angle on a sheet, a background
+that is not solid white, a malformed hand, an inconsistent face, wrong lighting, anything that would break
+downstream generation. If nothing is wrong, say so in one sentence. Plain English text, a short bullet list."""
+
+PROMPT_SYS_DEFAULT = """You write ONE Seedance Omni Reference prompt in ENGLISH for a single AI video generation,
+following this exact structure (Seedance 2.5/2.0 reference-to-video master formula):
+[Creatives Description]
+[One-sentence Summary]: Subject + Location + Event + Theme/Style + Special camera movement.
+[Plot per timestamp]: for each beat, "[a-b s] picture + camera + action + dialogue + SFX".
+[Global supplement]: repeat camera position, environment features, sound/atmosphere, lighting.
+Module 1 (reference layer) MUST come first and cite the exact @Image/@Audio/@Video numbers given to you, e.g.
+"Based on the uploaded references, strictly maintain the face and features of @Image1 for <name>, the composition
+and space of @Image2, the voice timbre of @Audio1 for <name>; strictly lock character positions."
+NEVER invent a reference number yourself — only use the numbers given in the mapping. Always end with this
+prohibited-items line, verbatim: "Prohibited: """ + PROHIBITED + """."
+Output plain text only, no markdown fences, no JSON."""
+
+REVIEW_SYS = """You review one Seedance video prompt against its batch JSON (characters, props, beats, dialogue)
+for a US vertical microdrama. Return ONLY one JSON object:
+{"pass": true|false, "notes": "short English notes: missing beats, wrong @Image/@Audio numbers, dialogue drift,
+or empty string if it fully matches"}"""
+
+
+class Lock:
+    def __init__(self):
+        self._l = threading.RLock()
+
+    def __enter__(self):
+        self._l.acquire()
+
+    def __exit__(self, *a):
+        self._l.release()
+
+
+LOCK = Lock()
+STATE = {}
+KEYS = {}
+RUNNING = set()
+SOLO = {}
+
+
+def ts():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def scrub(text):
+    s = str(text)
+    for v in list(KEYS.values()):
+        if v and len(v) > 6:
+            s = s.replace(v, "***")
+    return s
+
+
+def log(msg):
+    msg = scrub(msg)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{ts()} {msg}\n")
+    except OSError:
+        pass
+
+
+def load_keys():
+    keys = {}
+    for name in ("keys.txt", ".env"):
+        p = HERE / name
+        if not p.exists():
+            continue
+        for line in p.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            v = v.strip().strip('"').strip("'")
+            if v and k.strip() not in keys:
+                keys[k.strip()] = v
+    return keys
+
+
+def ensure_keys_file():
+    p = HERE / "keys.txt"
+    if not p.exists():
+        p.write_text("WAVESPEED_API_KEY=\nATLASCLOUD_API_KEY=\nBUDGET_USD=18\n", encoding="utf-8")
+
+
+def budget():
+    try:
+        return float(KEYS.get("BUDGET_USD", "18"))
+    except ValueError:
+        return 18.0
+
+
+def slug(s, n=20):
+    s = re.sub(r"[^a-z0-9]+", "_", str(s or "").lower()).strip("_")
+    return s[:n] or "x"
+
+
+def fresh_state():
+    return {"v": 3, "created": ts(), "project": {"name": "DuAn"},
+            "script_raw": "", "list_raw": "", "style": "",
+            "templates": {"char_single": "", "char_sheet": "", "env": "", "prop": "",
+                          "video_structure": "", "video_example": ""},
+            "reflib": {"path": "", "scanned": {}},
+            "episodes": {}, "episodes_order": [],
+            "chars": {}, "envs": {}, "props": {}, "voices": {}, "video_refs": {},
+            "chats": {}, "llm_vision_ok": True,
+            "settings": dict(DEFAULT_SETTINGS), "jobs": {}, "picks": {}, "job_n": 0, "asset_v": {},
+            "balance": {}, "export": {}}
+
+
+def load_state():
+    if STATE_FILE.exists():
+        st = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        fresh = fresh_state()
+        for k, v in fresh.items():
+            st.setdefault(k, v)
+        for k, v in DEFAULT_SETTINGS.items():
+            st["settings"].setdefault(k, v)
+        for k, v in fresh["templates"].items():
+            st["templates"].setdefault(k, v)
+        return st
+    return fresh_state()
+
+
+def save():
+    with LOCK:
+        OUT.mkdir(exist_ok=True)
+        tmp = STATE_FILE.with_name("state.tmp")
+        tmp.write_text(json.dumps(STATE, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, STATE_FILE)
+
+
+def ledger(job, event, amount):
+    new = not LEDGER.exists()
+    try:
+        with open(LEDGER, "a", newline="", encoding="utf-8-sig" if new else "utf-8") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["thời gian", "việc", "model", "số lượng", "đơn giá USD", "USD", "sự kiện"])
+            w.writerow([ts(), job["id"], job.get("model"), job.get("units"), job.get("unit_price"),
+                        round(amount, 4), event])
+    except OSError as e:
+        log(f"Không ghi được so_chi.csv ({e}) — file đang mở trong Excel?")
+
+
+def S():
+    return STATE["settings"]
+
+
+# ---------------------------------------------------------------- file text extraction (spec §15 A.1/A.2)
+def extract_text(data, filename):
+    """.txt/.md/.csv as-is; .docx/.xlsx via zipfile+xml (stdlib only); .pdf refused — paste text instead."""
+    ext = Path(filename).suffix.lower()
+    if ext in (".txt", ".md", ".csv"):
+        return data.decode("utf-8", errors="replace")
+    if ext == ".docx":
+        return _extract_docx(data)
+    if ext == ".xlsx":
+        return _extract_xlsx(data)
+    if ext == ".pdf":
+        raise ValueError("Chưa đọc được PDF — mở file, copy nội dung rồi dán vào ô text thay vì tải PDF lên.")
+    raise ValueError(f"Không đọc được đuôi file {ext or '(không rõ)'} — dùng .txt .md .docx .xlsx .csv, hoặc dán text.")
+
+
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _extract_docx(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        xml = z.read("word/document.xml")
+    root = ET.fromstring(xml)
+    paras = []
+    for p in root.iter(_W + "p"):
+        text = "".join(t.text or "" for t in p.iter(_W + "t"))
+        paras.append(text)
+    return "\n".join(paras)
+
+
+_SS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+
+
+def _extract_xlsx(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        shared = []
+        if "xl/sharedStrings.xml" in z.namelist():
+            sroot = ET.fromstring(z.read("xl/sharedStrings.xml"))
+            for si in sroot.iter(_SS + "si"):
+                shared.append("".join(t.text or "" for t in si.iter(_SS + "t")))
+        sheets = sorted(n for n in z.namelist() if re.match(r"xl/worksheets/sheet\d+\.xml$", n))
+        rows_out = []
+        for name in sheets:
+            root = ET.fromstring(z.read(name))
+            for row in root.iter(_SS + "row"):
+                cells = []
+                for c in row.iter(_SS + "c"):
+                    v = c.find(_SS + "v")
+                    val = v.text if v is not None else ""
+                    if c.get("t") == "s" and val:
+                        try:
+                            val = shared[int(val)]
+                        except (ValueError, IndexError):
+                            pass
+                    cells.append(val or "")
+                rows_out.append("\t".join(cells))
+        return "\n".join(rows_out)
+
+
+# ---------------------------------------------------------------- naming (spec §6, episode-scoped)
+def proj_name():
+    return slug(STATE["project"]["name"], 40) or "DuAn"
+
+
+def project_dir():
+    d = PROJECTS / proj_name()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def next_version(scope):
+    v = STATE["asset_v"].get(scope, 0) + 1
+    STATE["asset_v"][scope] = v
+    return v
+
+
+def asset_dest(sub, filename):
+    d = project_dir() / sub
+    d.mkdir(parents=True, exist_ok=True)
+    return d / filename
+
+
+NAMING = {
+    "portrait": ("01_PreProduction/03_Character", "Char_{name}_{label}_{res}_v{v}{ext}"),
+    "sheet": ("01_PreProduction/03_Character", "Char_{name}_sheet21x9_{res}_v{v}{ext}"),
+    "component": ("01_PreProduction/03_Character", "Char_{name}_component_{label}_v{v}{ext}"),
+    "env_wide": ("01_PreProduction/02_Environment", "Envi_{name}_{label}_{res}_v{v}{ext}"),
+    "env_rev": ("01_PreProduction/02_Environment", "Envi_{name}_{label}_rev_{res}_v{v}{ext}"),
+    "prop": ("01_PreProduction/05_Prop", "Prop_{name}_{res}_v{v}{ext}"),
+    "voice": ("01_PreProduction/06_Voice", "Voice_{name}_v{v}{ext}"),
+    "video_ref": ("01_PreProduction/04_VideoRef", "Video_Ref_{name}_v{v}{ext}"),
+    "storyboard": ("02_Production/storyboard", "Storyboard_{name}_v{v}{ext}"),
+}
+
+
+def make_filename(kind, v, ext, name="", label="", extra=None):
+    sub, tmpl = NAMING[kind]
+    extra = extra or {}
+    fn = tmpl.format(name=slug(name, 24), label=slug(label, 16) or "x", res=S().get("image_resolution", "2k").upper(),
+                      v=v, ext=ext, **extra)
+    return sub, fn
+
+
+# ---------------------------------------------------------------- reference bank (series-level)
+def _new_id(bank, prefix):
+    n = 1
+    while f"{prefix}{n}" in STATE[bank]:
+        n += 1
+    return f"{prefix}{n}"
+
+
+def new_char(name, desc="", approved=True):
+    cid = _new_id("chars", "char_")
+    STATE["chars"][cid] = {"id": cid, "name": name or cid, "desc": desc, "components": [], "approved": approved}
+    save()
+    return STATE["chars"][cid]
+
+
+def new_env(name, tag="EXT", time_of_day="day", desc="", approved=True):
+    eid = _new_id("envs", "env_")
+    STATE["envs"][eid] = {"id": eid, "name": name or eid, "tag": tag if tag in ("INT", "EXT") else "EXT",
+                          "time": time_of_day if time_of_day in ("day", "night") else "day", "text": desc,
+                          "approved": approved}
+    save()
+    return STATE["envs"][eid]
+
+
+def new_prop(name, desc="", approved=True):
+    pid = _new_id("props", "prop_")
+    STATE["props"][pid] = {"id": pid, "name": name or pid, "desc": desc, "approved": approved}
+    save()
+    return STATE["props"][pid]
+
+
+def apply_bank_data(data, approved=False):
+    """Merge parsed/proposed characters+environments+props (and optionally a style block) into the bank."""
+    by_name = lambda bank: {v["name"].lower(): v for v in STATE[bank].values()}
+    chars = by_name("chars")
+    for c in data.get("characters") or []:
+        name = str(c.get("name") or "").strip()
+        if not name:
+            continue
+        if name.lower() in chars:
+            chars[name.lower()]["desc"] = chars[name.lower()]["desc"] or str(c.get("desc") or "")
+        else:
+            new_char(name, str(c.get("desc") or ""), approved=approved)
+    envs = by_name("envs")
+    for e in data.get("environments") or []:
+        name = str(e.get("name") or "").strip()
+        if not name:
+            continue
+        if name.lower() in envs:
+            envs[name.lower()]["text"] = envs[name.lower()]["text"] or str(e.get("desc") or "")
+        else:
+            new_env(name, str(e.get("tag") or "EXT").upper(), str(e.get("time") or "day"), str(e.get("desc") or ""), approved=approved)
+    props = by_name("props")
+    for p in data.get("props") or []:
+        name = str(p.get("name") or "").strip()
+        if not name:
+            continue
+        if name.lower() not in props:
+            new_prop(name, str(p.get("desc") or ""), approved=approved)
+    if data.get("style") and not STATE["style"].strip():
+        STATE["style"] = str(data["style"]).strip()
+    save()
+
+
+def new_voice(name, char=""):
+    vid = _new_id("voices", "voice_")
+    STATE["voices"][vid] = {"id": vid, "name": name or vid, "char": char if char in STATE["chars"] else ""}
+    save()
+    return STATE["voices"][vid]
+
+
+def set_approved(bank, id_, approved):
+    if bank not in ("chars", "envs", "props") or id_ not in STATE[bank]:
+        raise ValueError("Không có mục này.")
+    STATE[bank][id_]["approved"] = bool(approved)
+    save()
+
+
+def new_video_ref(name):
+    rid = _new_id("video_refs", "ref_")
+    STATE["video_refs"][rid] = {"id": rid, "name": name or rid}
+    save()
+    return STATE["video_refs"][rid]
+
+
+def add_component(char_id, data, ext, label, source, use, reflib_path=None):
+    if char_id not in STATE["chars"]:
+        raise ValueError("Không có nhân vật này.")
+    if source not in ("ai", "real"):
+        raise ValueError("source phải là ai hoặc real.")
+    if use not in COMPONENT_USES:
+        raise ValueError("use không hợp lệ: " + use)
+    if source == "real" and use in ("face", "eyes"):
+        raise ValueError("Không dùng ảnh người thật cho mặt/mắt (hard rule: chỉ mặt AI).")
+    c = STATE["chars"][char_id]
+    if reflib_path:
+        comp = {"id": f"c{next_version(f'component:{char_id}')}", "file": str(reflib_path), "label": label,
+                "source": source, "use": use, "created": ts(), "url": None, "reflib": True}
+    else:
+        v = next_version(f"component:{char_id}")
+        sub, fn = make_filename("component", v, ext, name=c["name"], label=label)
+        dest = asset_dest(sub, fn)
+        dest.write_bytes(data)
+        comp = {"id": f"c{v}", "file": str(dest.relative_to(HERE)), "label": label, "source": source, "use": use,
+                "created": ts(), "url": None}
+    c["components"].append(comp)
+    save()
+    log(f"Thêm component {use}/{source} cho {char_id}: {label}")
+    return comp
+
+
+def remove_component(char_id, comp_id):
+    c = STATE["chars"].get(char_id)
+    if not c:
+        return
+    c["components"] = [x for x in c["components"] if x["id"] != comp_id]
+    save()
+
+
+# ---------------------------------------------------------------- reference library (spec §15 A.4)
+IMG_EXT = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def reflib_set_path(path):
+    p = Path(str(path)).expanduser()
+    if not p.is_dir():
+        raise ValueError("Không tìm thấy thư mục này trên máy (đường dẫn phải có trên máy đang chạy app).")
+    STATE["reflib"]["path"] = str(p)
+    save()
+    return {"path": str(p)}
+
+
+def _reflib_subdir(root, name):
+    if not root.is_dir():
+        return None
+    return next((x for x in root.iterdir() if x.is_dir() and x.name.lower() == name.lower()), None)
+
+
+def reflib_files():
+    """[(abs_path, source), ...] under <reflib path>/AI and <reflib path>/THAT."""
+    root = Path(STATE["reflib"]["path"]) if STATE["reflib"]["path"] else None
+    out = []
+    if not root or not root.is_dir():
+        return out
+    for name, source in (("AI", "ai"), ("THAT", "real")):
+        d = _reflib_subdir(root, name)
+        if not d:
+            continue
+        for f in sorted(d.rglob("*")):
+            if f.is_file() and f.suffix.lower() in IMG_EXT:
+                out.append((f, source))
+    return out
+
+
+def reflib_key(path):
+    st = path.stat()
+    return f"{path}::{int(st.st_mtime)}"
+
+
+def reflib_unscanned():
+    scanned = STATE["reflib"]["scanned"]
+    return [(p, src) for p, src in reflib_files() if reflib_key(p) not in scanned]
+
+
+def reflib_candidates(exclude_face_real=True):
+    """Tagged entries available for character-component suggestion, as (relkey, path, source, use, label)."""
+    out = []
+    for key, info in STATE["reflib"]["scanned"].items():
+        path = key.rsplit("::", 1)[0]
+        if exclude_face_real and info["source"] == "real" and info["use"] in ("face", "eyes"):
+            continue
+        out.append((key, path, info["source"], info["use"], info["label"]))
+    return out
+
+
+# ---------------------------------------------------------------- episodes / shots / batches
+def new_episode(name=""):
+    n = 1
+    while f"EP{n:02d}" in STATE["episodes"]:
+        n += 1
+    eid = f"EP{n:02d}"
+    STATE["episodes"][eid] = {"id": eid, "name": name or eid, "shots": [], "batches": [],
+                              "prompts": {}, "qc": {}, "fixes": {}, "export": {}}
+    STATE["episodes_order"].append(eid)
+    save()
+    return STATE["episodes"][eid]
+
+
+def episode(eid):
+    ep = STATE["episodes"].get(eid)
+    if not ep:
+        raise ApiError(f"Không có tập {eid}.")
+    return ep
+
+
+def shot_by_id(sid):
+    eid = sid.split("-", 1)[0] if "-" in sid else None
+    ep = STATE["episodes"].get(eid) if eid else None
+    if ep:
+        s = next((s for s in ep["shots"] if s["id"] == sid), None)
+        if s:
+            return s
+    for ep in STATE["episodes"].values():
+        s = next((s for s in ep["shots"] if s["id"] == sid), None)
+        if s:
+            return s
+    return None
+
+
+def batch_by_id(bid):
+    eid = bid.split("-B", 1)[0] if "-B" in bid else None
+    ep = STATE["episodes"].get(eid) if eid else None
+    if ep:
+        b = next((b for b in ep["batches"] if b["id"] == bid), None)
+        if b:
+            return ep, b
+    for ep in STATE["episodes"].values():
+        b = next((b for b in ep["batches"] if b["id"] == bid), None)
+        if b:
+            return ep, b
+    return None, None
+
+
+def normalize_shots_for_episode(eid, raw_shots, keep_storyboard=True):
+    old_by_id = {s["id"]: s for s in episode(eid)["shots"]} if keep_storyboard else {}
+    shots = []
+    for i, s in enumerate(raw_shots or []):
+        if not isinstance(s, dict):
+            continue
+        base_id = str(s.get("id") or f"SH{i + 1:02d}").strip() or f"SH{i + 1:02d}"
+        sid = base_id if base_id.startswith(eid + "-") else f"{eid}-{base_id}"
+        try:
+            dur = max(4, min(15, int(round(float(s.get("duration") or 6)))))
+        except (TypeError, ValueError):
+            dur = 6
+        old = old_by_id.get(sid, {})
+        shots.append({"id": sid, "duration": dur, "location": str(s.get("location") or "").strip(),
+                      "cast": [str(x).strip() for x in (s.get("cast") or []) if str(x).strip()],
+                      "props": [str(x).strip() for x in (s.get("props") or []) if str(x).strip()],
+                      "desc": str(s.get("desc") or "").strip(), "speaker": str(s.get("speaker") or "").strip(),
+                      "line": str(s.get("line") or "").strip(), "storyboard_on": bool(old.get("storyboard_on", False))})
+    if not shots:
+        raise ValueError(f"{eid}: shot list không có shot nào.")
+    return shots
+
+
+def split_batches(eid):
+    """Deterministic, free grouping (spec §15 B.8): consecutive same-location shots, capped 30s/15s,
+    never splitting a shot. First batch = hook, last = cliffhanger, both default 2.5; the rest default 2.0."""
+    shots = episode(eid)["shots"]
+    if not shots:
+        return []
+    groups, cur, cur_loc, cur_dur = [], [], None, 0
+    for s in shots:
+        if cur and (s["location"] != cur_loc or cur_dur + s["duration"] > 30):
+            groups.append(cur)
+            cur, cur_dur = [], 0
+        cur.append(s)
+        cur_dur += s["duration"]
+        cur_loc = s["location"]
+    if cur:
+        groups.append(cur)
+    # a batch destined to be "normal" (2.0) must fit 15s — re-split those at shot boundaries
+    expanded = []
+    for gi, g in enumerate(groups):
+        is_end = gi in (0, len(groups) - 1)
+        if is_end:
+            expanded.append(g)
+            continue
+        sub, sub_dur = [], 0
+        for s in g:
+            if sub and sub_dur + s["duration"] > 15:
+                expanded.append(sub)
+                sub, sub_dur = [], 0
+            sub.append(s)
+            sub_dur += s["duration"]
+        if sub:
+            expanded.append(sub)
+    batches = []
+    n = len(expanded)
+    for i, g in enumerate(expanded):
+        tier = "hook" if i == 0 else ("cliffhanger" if i == n - 1 else "normal")
+        batches.append({"id": f"{eid}-B{i + 1}", "shot_ids": [s["id"] for s in g], "tier": tier,
+                        "model": TIER_MODEL[tier], "price": TIER_PRICE[tier],
+                        "duration": sum(s["duration"] for s in g), "video_refs": []})
+    return batches
+
+
+def normalize_batches(eid, raw):
+    if not isinstance(raw, list):
+        raise ValueError("Batch phải là một danh sách JSON.")
+    shots_by_id = {s["id"]: s for s in episode(eid)["shots"]}
+    out = []
+    for i, b in enumerate(raw):
+        if not isinstance(b, dict):
+            continue
+        bid = str(b.get("id") or f"{eid}-B{i + 1}").strip()
+        if not bid.startswith(eid + "-B"):
+            bid = f"{eid}-B{i + 1}"
+        shot_ids = [str(x).strip() for x in (b.get("shot_ids") or []) if str(x).strip() in shots_by_id]
+        if not shot_ids:
+            continue
+        tier = str(b.get("tier") or "normal").strip().lower()
+        if tier not in TIER_MODEL:
+            tier = "normal"
+        model = str(b.get("model") or TIER_MODEL[tier]).strip()
+        try:
+            price = float(b.get("price", TIER_PRICE[tier]))
+        except (TypeError, ValueError):
+            price = TIER_PRICE[tier]
+        out.append({"id": bid, "shot_ids": shot_ids, "tier": tier, "model": model, "price": price,
+                    "duration": sum(shots_by_id[x]["duration"] for x in shot_ids),
+                    "video_refs": [str(x).strip() for x in (b.get("video_refs") or []) if str(x).strip()]})
+    return out
+
+
+def batch_index(ep, bid):
+    for i, b in enumerate(ep["batches"]):
+        if b["id"] == bid:
+            return i
+    return -1
+
+
+def parse_json(text):
+    t = text.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", t)
+    try:
+        return json.loads(t)
+    except ValueError:
+        a, b = t.find("{"), t.rfind("}")
+        if a >= 0 and b > a:
+            return json.loads(t[a:b + 1])
+        raise
+
+
+def char_name(cid_or_name):
+    c = STATE["chars"].get(cid_or_name)
+    if c:
+        return c["name"]
+    for c in STATE["chars"].values():
+        if c["name"].lower() == str(cid_or_name).lower():
+            return c["name"]
+    return cid_or_name
+
+
+def _find_char(name):
+    for c in STATE["chars"].values():
+        if c["id"] == name or c["name"].lower() == str(name).lower():
+            return c
+    return None
+
+
+def _find_env(name):
+    for e in STATE["envs"].values():
+        if e["id"] == name or e["name"].lower() == str(name).lower():
+            return e
+    return None
+
+
+def _find_prop(name):
+    for p in STATE["props"].values():
+        if p["id"] == name or p["name"].lower() == str(name).lower():
+            return p
+    return None
+
+
+def batch_shots(ep, b):
+    by_id = {s["id"]: s for s in ep["shots"]}
+    return [by_id[x] for x in b["shot_ids"] if x in by_id]
+
+
+def batch_context(ep, b):
+    shots = batch_shots(ep, b)
+    counts = {}
+    for s in shots:
+        if s["location"]:
+            counts[s["location"]] = counts.get(s["location"], 0) + 1
+    location = max(counts, key=counts.get) if counts else ""
+    chars, props = [], []
+    beats, lines, t = [], [], 0
+    for s in shots:
+        for c in s["cast"]:
+            if c not in chars:
+                chars.append(c)
+        for p in s["props"]:
+            if p not in props:
+                props.append(p)
+        beats.append({"t0": t, "t1": t + s["duration"], "action": s["desc"], "shot": s["id"]})
+        if s["line"]:
+            lines.append({"speaker": s["speaker"], "text": s["line"], "t": t})
+        t += s["duration"]
+    return {"location": location, "characters": chars, "props": props, "beats": beats, "lines": lines}
+
+
+def build_mapping(bid):
+    """Ordered @Image/@Video/@Audio list for one batch, plus the text the LLM is given (never guesses numbers)."""
+    ep, b = batch_by_id(bid)
+    if not b:
+        raise ApiError(f"Không có batch {bid}.")
+    ctx = batch_context(ep, b)
+    images, videos, audios, lines_txt = [], [], [], []
+    for cname in ctx["characters"]:
+        c = _find_char(cname)
+        if not c:
+            continue
+        sheet = pick("sheet", c["id"])
+        if sheet:
+            images.append(("char_sheet", c["id"], sheet))
+            lines_txt.append(f"@Image{len(images)} = Char_{c['name']} sheet 21:9 for {c['name']}")
+        for v in STATE["voices"].values():
+            if v["char"] == c["id"]:
+                vj = pick("voice", v["id"])
+                if vj:
+                    audios.append(("voice", v["id"], vj))
+                    lines_txt.append(f"@Audio{len(audios)} = voice timbre of {c['name']}")
+    env = _find_env(ctx["location"])
+    if env:
+        wide = pick("env_wide", env["id"])
+        if wide:
+            images.append(("env_wide", env["id"], wide))
+            lines_txt.append(f"@Image{len(images)} = Envi_{env['name']} establishing shot")
+    for pname in ctx["props"]:
+        p = _find_prop(pname)
+        if p:
+            pj = pick("prop", p["id"])
+            if pj:
+                images.append(("prop", p["id"], pj))
+                lines_txt.append(f"@Image{len(images)} = Prop_{p['name']}")
+    for rname in b.get("video_refs") or []:
+        r = next((v for v in STATE["video_refs"].values() if v["name"].lower() == rname.lower()), None) or new_video_ref(rname)
+        rj = pick("video_ref", r["id"])
+        if rj:
+            videos.append(("video_ref", r["id"], rj))
+            lines_txt.append(f"@Video{len(videos)} = motion/camera reference: {r['name']}")
+    for sh in batch_shots(ep, b):
+        if sh.get("storyboard_on"):
+            sbj = pick("storyboard", sh["id"])
+            if sbj:
+                images.append(("storyboard", sh["id"], sbj))
+                lines_txt.append(f"@Image{len(images)} = storyboard for shot {sh['id']} — composition/pose reference only, keep the face from the character sheet")
+    i = batch_index(ep, bid)
+    if i > 0:
+        prev = ep["batches"][i - 1]
+        prevj = pick("gen", prev["id"])
+        if prevj and prevj.get("last_frame"):
+            images.append(("last_frame", prev["id"], prevj))
+            lines_txt.append(f"@Image{len(images)} = last frame of {prev['id']} (raccord continuity)")
+    return {"images": images, "videos": videos, "audios": audios, "text": "\n".join(lines_txt), "ctx": ctx}
+
+
+def img_url(entry):
+    """entry = (kind, id, job). A last_frame reference already has a provider URL; everything else may be local."""
+    kind, _id, j = entry
+    return j["last_frame"] if kind == "last_frame" else url_of(j)
+
+
+def url_of(job):
+    """A local-only asset (owner upload, ref-library file, ffmpeg frame) needs a public URL before use."""
+    if job.get("url"):
+        return job["url"]
+    if not job.get("file"):
+        raise ApiError(f"{job.get('id', '?')} chưa có file để dùng làm tham chiếu.")
+    path = Path(job["file"])
+    full = path if path.is_absolute() else HERE / path
+    ws = ws_client()
+    url = ws.upload_local(full)
+    job["url"] = url
+    save()
+    return url
+
+
+# ---------------------------------------------------------------- providers wiring
+def key_for(provider):
+    k = KEYS.get(KEY_OF[provider], "")
+    if not k:
+        raise ApiError(f"Chưa có {KEY_OF[provider]} trong keys.txt.")
+    return k
+
+
+def ws_client():
+    return providers.WaveSpeed(WS_BASE, WS_LLM_BASE, key_for("wavespeed"))
+
+
+def atlas_client():
+    return providers.Atlas(ATLAS_BASE, ATLAS_PUB_BASE, key_for("atlas"))
+
+
+def read_balance(provider):
+    key = KEYS.get(KEY_OF[provider])
+    if not key:
+        return None
+    try:
+        if provider == "wavespeed":
+            return providers.WaveSpeed(WS_BASE, WS_LLM_BASE, key).balance()
+        return providers.Atlas(ATLAS_BASE, ATLAS_PUB_BASE, key).balance()
+    except Exception as e:
+        log(f"Không đọc được số dư {PROVIDER_NAME[provider]}: {e}")
+        return None
+
+
+def refresh_balances(reset_start=False):
+    for p in KEY_OF:
+        v = read_balance(p)
+        if v is None:
+            continue
+        with LOCK:
+            b = STATE["balance"].setdefault(p, {})
+            if reset_start or b.get("start") is None:
+                b["start"] = v
+                b["start_t"] = ts()
+            b["now"] = v
+            b["t"] = ts()
+    save()
+
+
+# ---------------------------------------------------------------- job engine (takes / picks / money)
+def takes(kind, target):
+    return sorted((j for j in STATE["jobs"].values() if j["kind"] == kind and j["target"] == target),
+                  key=lambda j: j["take"])
+
+
+def pick(kind, target):
+    ts_ = takes(kind, target)
+    chosen = STATE["picks"].get(f"{kind}:{target}")
+    for j in ts_:
+        if j["id"] == chosen and j["status"] == "done":
+            return j
+    done = [j for j in ts_ if j["status"] == "done"]
+    return done[-1] if done else None
+
+
+def in_progress(kind, target):
+    return any(j["status"] in ("queued", "starting", "running") for j in takes(kind, target))
+
+
+def live_takes(kind, target):
+    return [j for j in takes(kind, target) if j["status"] not in ("failed", "cancelled")]
+
+
+def model_measured(model):
+    return any(j.get("measured") for j in STATE["jobs"].values() if j.get("model") == model)
+
+
+def money():
+    spent = reserved = 0.0
+    for j in STATE["jobs"].values():
+        st = j["status"]
+        if st in ("queued", "starting"):
+            reserved += j["est"]
+        elif st == "running":
+            spent += j.get("cost", 0) if j.get("pid") else 0
+            reserved += 0 if j.get("pid") else j["est"]
+        elif st in ("done", "stalled"):
+            spent += j.get("cost", 0)
+    return round(spent, 4), round(reserved, 4)
+
+
+def llm_est(pin, pout, prompt_chars, out_tokens):
+    return prompt_chars / 3.5 / 1e6 * pin + out_tokens / 1e6 * pout
+
+
+def _new_job(kind, target, provider, model, units, unit_price, label, extra=None):
+    STATE["job_n"] += 1
+    take = 1 + max([j["take"] for j in STATE["jobs"].values() if j["kind"] == kind and j["target"] == target] or [0])
+    jid = f"{kind}:{target}:t{take}"
+    est = round(units * unit_price, 4)
+    job = dict(id=jid, n=STATE["job_n"], kind=kind, target=target, take=take, provider=provider, model=model,
+               units=units, unit_price=unit_price, est=est, cost=0.0, status="queued", created=ts(), label=label)
+    job.update(extra or {})
+    STATE["jobs"][jid] = job
+    return job
+
+
+def register_local(kind, target, path, provider="local", meta=None):
+    """A file the owner uploaded (or ffmpeg produced): free, instant, same take/pick machinery as generated jobs."""
+    with LOCK:
+        job = _new_job(kind, target, provider, None, 1, 0.0, f"{STAGE_NAME.get(kind, kind)} ({target})", meta)
+        rel = path if (path and Path(path).is_absolute() and not str(path).startswith(str(HERE))) else (
+            str(Path(path).relative_to(HERE)) if path else None)
+        job.update(status="done", cost=0.0, file=rel, t_end=ts())
+        STATE["picks"][f"{kind}:{target}"] = job["id"]
+    save()
+    ledger(job, "tải lên", 0)
+    return job
+
+
+def probe_duration(path):
+    ff = shutil.which("ffprobe")
+    if not ff:
+        return None
+    try:
+        r = subprocess.run([ff, "-v", "error", "-show_entries", "format=duration", "-of",
+                            "default=noprint_wrappers=1:nokey=1", str(path)], capture_output=True, text=True, timeout=20)
+        return round(float(r.stdout.strip()), 1)
+    except Exception:
+        return None
+
+
+_BANK_NAME = {"portrait": "chars", "sheet": "chars", "env_wide": "envs", "env_rev": "envs", "prop": "props",
+              "voice": "voices", "video_ref": "video_refs"}
+
+
+def upload_asset(kind, target, data, ext, label=""):
+    """Owner-supplied file for a single-pick slot (portrait/sheet/env/prop/voice/video_ref) — no API call, no cost."""
+    bank = _BANK_NAME.get(kind)
+    if not bank or target not in STATE[bank]:
+        raise ValueError("Không có mục này trong Tham chiếu.")
+    v = 1 + len(takes(kind, target))
+    sub, fn = make_filename(kind, v, ext, name=STATE[bank][target]["name"], label=label)
+    dest = asset_dest(sub, fn)
+    dest.write_bytes(data)
+    meta = {}
+    if kind in ("voice", "video_ref"):
+        dur = probe_duration(dest)
+        if dur is not None:
+            meta["dur"] = dur
+    return register_local(kind, target, dest, meta=meta or None)
+
+
+# ---------------------------------------------------------------- providers-facing helpers (chat edit, templates)
+ASPECT_OF = {"portrait": "3:4", "sheet": "21:9", "env_wide": "9:16", "env_rev": "9:16", "prop": "1:1", "storyboard": "9:16"}
+
+
+def chat_rewrite(text):
+    ws = ws_client()
+    st = S()
+    content, usage = ws.chat(st["llm_write"], REWRITE_SYS, text, False)
+    pt = usage.get("prompt_tokens") or int((len(REWRITE_SYS) + len(text)) / 3.5)
+    ct = usage.get("completion_tokens") or int(len(content) / 3.5)
+    cost = round(pt / 1e6 * st["llm_write_in"] + ct / 1e6 * st["llm_write_out"], 5)
+    return content.strip(), cost
+
+
+def template_prompt(template_key, item_context):
+    """Fill the owner's saved template (spec §15 A.3); with no template, fall back to a clean generic prompt."""
+    tmpl = STATE["templates"].get(template_key, "").strip()
+    style = STATE["style"].strip()
+    ws = ws_client()
+    st = S()
+    user = f"ITEM INFO:\n{item_context}\n\nSHARED STYLE BLOCK:\n{style or '(none given)'}\n\nTEMPLATE:\n{tmpl or '(none saved — write a clean prompt yourself)'}"
+    content, usage = ws.chat(st["llm_write"], TEMPLATE_FILL_SYS, user, False)
+    pt = usage.get("prompt_tokens") or int((len(TEMPLATE_FILL_SYS) + len(user)) / 3.5)
+    ct = usage.get("completion_tokens") or int(len(content) / 3.5)
+    cost = round(pt / 1e6 * st["llm_write_in"] + ct / 1e6 * st["llm_write_out"], 5)
+    return content.strip(), cost
+
+
+def build_edit_body(job):
+    st = S()
+    base = STATE["jobs"].get(job["base_take"])
+    if not base:
+        raise ApiError("Không còn bản gốc để sửa.")
+    rewritten, rewrite_cost = chat_rewrite(job["chat_text"])
+    refs = [url_of(base)] + [url_of(STATE["jobs"][aid]) for aid in (job.get("attachments") or []) if aid in STATE["jobs"]]
+    body = {"prompt": rewritten, "images": refs, "aspect_ratio": ASPECT_OF.get(job["kind"], "9:16"),
+            "resolution": job.get("resolution") or st["image_resolution"], "output_format": "jpeg"}
+    chat_key = f"{job['kind']}:{job['target']}"
+    with LOCK:
+        STATE["chats"].setdefault(chat_key, []).append({"role": "assistant", "text": rewritten, "job": job["id"], "t": ts()})
+    save()
+    return body, rewritten, {"rewrite_cost": rewrite_cost}
+
+
+def image_price_for(model, resolution):
+    if "nano-banana" in model:
+        return IMAGE_PRICE.get(resolution, 0.14)
+    if "seedream" in model:
+        return 0.027
+    if "gpt-image" in model:
+        return 0.19  # unverified — check WaveSpeed's own listing before the first real run (spec §14.3)
+    return IMAGE_PRICE.get(resolution, 0.14)
+
+
+TEMPLATE_EST = 0.02  # flat estimate added to a dry-run when a template-fill LLM call will run first
+
+
+def build_body(job):
+    k, t = job["kind"], job["target"]
+    st = S()
+    if job.get("edit"):
+        return build_edit_body(job)
+    if k == "portrait":
+        c = STATE["chars"][t]
+        if not c["components"]:
+            raise ApiError(f"{c['name']}: chưa có ảnh thành phần nào.")
+        refs = [url_of(cc) for cc in c["components"]]
+        item = f"Character name: {c['name']}. Description: {c['desc'] or 'a fictional adult'}. Output: ONE consistent character portrait on a solid white background, photoreal, 3:4, combining the given reference components (hair/eyes/face/body/costume from the matching tagged references). No text, no watermark."
+        prompt, cost = template_prompt("char_single", item)
+        return {"prompt": prompt, "images": refs, "aspect_ratio": "3:4", "resolution": st["image_resolution"],
+                "output_format": "png"}, prompt, {"components": [cc["id"] for cc in c["components"]], "rewrite_cost": cost}
+    if k == "sheet":
+        c = STATE["chars"][t]
+        pj = pick("portrait", t)
+        item = f"Character name: {c['name']}. Build a 21:9 reference sheet on a solid white background from the uploaded character image: the right 70% shows 4 full-body views (front, 3/4, side, back); the left 30% shows 4 face views (front, 3/4 left, 3/4 right, profile). Keep the exact face and outfit. No text, no watermark."
+        prompt, cost = template_prompt("char_sheet", item)
+        return {"prompt": prompt, "images": [url_of(pj)], "aspect_ratio": "21:9", "resolution": st["sheet_resolution"],
+                "output_format": "png"}, prompt, {"portrait": pj["id"], "rewrite_cost": cost}
+    if k in ("env_wide", "env_rev"):
+        e = STATE["envs"][t]
+        angle = "an establishing wide shot" if k == "env_wide" else "the reverse camera angle of the same location"
+        when = "night" if e.get("time") == "night" else "day"
+        item = f"Environment: {e['name']} ({e.get('tag', 'EXT')}, {when}time). Description: {e['text']}. Output: photoreal vertical 9:16 {angle}. No text, no watermark, no people unless described."
+        prompt, cost = template_prompt("env", item)
+        return {"prompt": prompt, "aspect_ratio": "9:16", "resolution": st["image_resolution"],
+                "output_format": "jpeg"}, prompt, {"rewrite_cost": cost}
+    if k == "prop":
+        p = STATE["props"][t]
+        item = f"Prop: {p['name']}. Description: {p.get('desc') or ''}. Output: photoreal product-style still, solid white background, studio light. No text, no watermark."
+        prompt, cost = template_prompt("prop", item)
+        return {"prompt": prompt, "aspect_ratio": "1:1", "resolution": st["image_resolution"], "output_format": "jpeg"}, prompt, {"rewrite_cost": cost}
+    if k == "storyboard":
+        sh = shot_by_id(t)
+        refs = []
+        for cname in sh["cast"]:
+            c = _find_char(cname)
+            sj = c and pick("sheet", c["id"])
+            if sj:
+                refs.append(url_of(sj))
+        env = _find_env(sh["location"])
+        ej = env and pick("env_wide", env["id"])
+        if ej:
+            refs.append(url_of(ej))
+        prompt = (f"Photoreal vertical 9:16 film still, storyboard frame for shot {sh['id']}: {sh['desc']}. "
+                  "Keep the exact face and identity of each character from their sheet reference; use the "
+                  "environment reference for the location's look. No text, no watermark.")
+        return {"prompt": prompt, "images": refs, "aspect_ratio": "9:16", "resolution": st["image_resolution"],
+                "output_format": "jpeg"}, prompt, {}
+    if k == "fix_img":
+        f = _find_fix(t)
+        frame = pick("frame", t)
+        prompt = f["prompt"] or "Fix this frame so it matches the character and scene exactly."
+        return {"prompt": prompt, "images": [url_of(frame)], "aspect_ratio": "9:16", "resolution": st["image_resolution"],
+                "output_format": "jpeg"}, prompt, {"frame": frame["id"]}
+    if k == "gen":
+        ep, b = batch_by_id(t)
+        mapping = build_mapping(t)
+        prompt = ep["prompts"].get(t, {}).get("text") or ""
+        body = {"prompt": prompt, "duration": b["duration"], "resolution": st["resolution"], "ratio": "9:16",
+                "generate_audio": True, "watermark": False, "return_last_frame": True,
+                "omni_reference_task_type": "auto"}
+        if mapping["images"]:
+            body["reference_images"] = [img_url(e) for e in mapping["images"]]
+        if mapping["videos"]:
+            body["reference_videos"] = [img_url(e) for e in mapping["videos"]]
+        if mapping["audios"]:
+            body["reference_audios"] = [img_url(e) for e in mapping["audios"]]
+        return body, prompt, {"mapping": mapping["text"]}
+    if k == "patch":
+        f = _find_fix(t)
+        ep, b = batch_by_id(f["batch"])
+        mapping = build_mapping(f["batch"])
+        fix_img = pick("fix_img", t)
+        dur = max(4, min(10, f["end"] - f["start"]))
+        prompt = (f"{ep['prompts'].get(f['batch'], {}).get('text', '')}\n\nPatch only seconds {f['start']}-{f['end']} "
+                  f"of this shot using the corrected reference frame as the extra image. Duration {dur}s. "
+                  "Prohibited: " + PROHIBITED + ".")
+        imgs = [img_url(e) for e in mapping["images"]] + [url_of(fix_img)]
+        body = {"prompt": prompt, "duration": dur, "resolution": st["resolution"], "ratio": "9:16",
+                "generate_audio": True, "watermark": False, "reference_images": imgs,
+                "omni_reference_task_type": "edit"}
+        if mapping["videos"]:
+            body["reference_videos"] = [img_url(e) for e in mapping["videos"]]
+        if mapping["audios"]:
+            body["reference_audios"] = [img_url(e) for e in mapping["audios"]]
+        return body, prompt, {"fix_img": fix_img["id"]}
+    raise ApiError("Loại việc không rõ: " + k)
+
+
+def _find_fix(fid):
+    for ep in STATE["episodes"].values():
+        if fid in ep["fixes"]:
+            return ep["fixes"][fid]
+    raise ApiError(f"Không có fix {fid}.")
+
+
+# ---------------------------------------------------------------- job specs (what a stage would run)
+def specs_for(stage, target=None, redo=False):
+    st = S()
+    if stage == "split_episodes":
+        if not STATE["script_raw"].strip():
+            return [], "Chưa có kịch bản/shot list."
+        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(SPLIT_EPISODES_SYS) + len(STATE["script_raw"]), 4000)
+        return [dict(kind="split_episodes", target="ep", provider="wavespeed", model=st["llm_write"], units=1,
+                     unit_price=round(est, 4), label="Tách kịch bản thành các tập")], None
+    if stage == "parse_list":
+        if not STATE["list_raw"].strip():
+            return [], "Chưa có file/nội dung danh sách nhân vật-bối cảnh-prop-style."
+        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(PARSE_LIST_SYS) + len(STATE["list_raw"]), 1600)
+        return [dict(kind="parse_list", target="ep", provider="wavespeed", model=st["llm_write"], units=1,
+                     unit_price=round(est, 4), label="Đọc file danh sách")], None
+    if stage == "preprod":
+        if not STATE["script_raw"].strip():
+            return [], "Chưa có kịch bản."
+        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(PREPROD_SYS) + len(STATE["script_raw"]), 1400)
+        return [dict(kind="preprod", target="ep", provider="wavespeed", model=st["llm_write"], units=1,
+                     unit_price=round(est, 4), label="Đề xuất danh sách tiền kỳ (từ kịch bản)")], None
+    if stage == "reflib_scan":
+        new = reflib_unscanned()
+        if not new:
+            return [], "Không có ảnh mới trong kho ref (hoặc chưa đặt đường dẫn)."
+        est = llm_est(st["llm_review_in"], st["llm_review_out"], len(REFLIB_TAG_SYS), 60)
+        return [dict(kind="reflib_scan", target="ep", provider="wavespeed", model=st["llm_review"], units=len(new),
+                     unit_price=round(est, 5), label=f"Quét {len(new)} ảnh trong kho ref")], None
+    if stage == "suggest_components":
+        if not target or target not in STATE["chars"]:
+            return [], "Không có nhân vật này."
+        if not STATE["reflib"]["scanned"]:
+            return [], "Chưa quét kho ref."
+        est = llm_est(st["llm_write_in"], st["llm_write_out"], len(SUGGEST_COMPONENTS_SYS) + 2000, 200)
+        return [dict(kind="suggest_components", target=target, provider="wavespeed", model=st["llm_write"], units=1,
+                     unit_price=round(est, 4), label=f"Gợi ý ảnh thành phần {STATE['chars'][target]['name']}")], None
+    if stage == "refs_all":
+        out = []
+        for sub in ("portrait", "sheet", "env_wide", "prop"):
+            specs, err = specs_for(sub, None, redo)
+            if err and not out:
+                continue
+            out.extend(specs)
+        return out, None
+    if stage == "portrait":
+        out = []
+        for c in STATE["chars"].values():
+            if target and c["id"] != target:
+                continue
+            if not c.get("approved", True):
+                if target:
+                    return [], f"{c['name']}: chưa được duyệt trong Tham chiếu."
+                continue
+            if not redo and live_takes("portrait", c["id"]):
+                continue
+            if not c["components"]:
+                if target:
+                    return [], f"{c['name']}: chưa có ảnh thành phần nào."
+                continue
+            out.append(dict(kind="portrait", target=c["id"], provider="wavespeed", model="google/nano-banana-pro/edit",
+                             units=1, unit_price=IMAGE_PRICE[st["image_resolution"]] + TEMPLATE_EST, label=f"Ảnh nhân vật {c['name']}"))
+        return out, None
+    if stage == "sheet":
+        out = []
+        for c in STATE["chars"].values():
+            if target and c["id"] != target:
+                continue
+            if not redo and live_takes("sheet", c["id"]):
+                continue
+            if not pick("portrait", c["id"]) and not in_progress("portrait", c["id"]):
+                if target:
+                    return [], f"{c['name']}: chưa có ảnh nhân vật được duyệt."
+                continue
+            out.append(dict(kind="sheet", target=c["id"], provider="wavespeed", model="google/nano-banana-pro/edit",
+                             units=1, unit_price=IMAGE_PRICE[st["sheet_resolution"]] + TEMPLATE_EST, label=f"Sheet 21:9 {c['name']}"))
+        return out, None
+    if stage in ("env_wide", "env_rev"):
+        out = []
+        for e in STATE["envs"].values():
+            if target and e["id"] != target:
+                continue
+            if not e.get("approved", True):
+                if target:
+                    return [], f"{e['name']}: chưa được duyệt trong Tham chiếu."
+                continue
+            if not redo and live_takes(stage, e["id"]):
+                continue
+            if not e["text"].strip():
+                if target:
+                    return [], f"{e['name']}: chưa có mô tả bối cảnh."
+                continue
+            out.append(dict(kind=stage, target=e["id"], provider="wavespeed", model="google/nano-banana-pro/text-to-image",
+                             units=1, unit_price=IMAGE_PRICE[st["image_resolution"]] + TEMPLATE_EST,
+                             label=("Ảnh bối cảnh " if stage == "env_wide" else "Bối cảnh góc ngược ") + e["name"]))
+        return out, None
+    if stage == "prop":
+        out = []
+        for p in STATE["props"].values():
+            if target and p["id"] != target:
+                continue
+            if not p.get("approved", True):
+                if target:
+                    return [], f"{p['name']}: chưa được duyệt trong Tham chiếu."
+                continue
+            if not redo and live_takes("prop", p["id"]):
+                continue
+            out.append(dict(kind="prop", target=p["id"], provider="wavespeed", model="google/nano-banana-pro/text-to-image",
+                             units=1, unit_price=IMAGE_PRICE[st["image_resolution"]] + TEMPLATE_EST, label=f"Ảnh prop {p['name']}"))
+        return out, None
+    if stage == "storyboard":
+        out = []
+        for ep in STATE["episodes"].values():
+            for sh in ep["shots"]:
+                if target and sh["id"] != target:
+                    continue
+                if not sh.get("storyboard_on"):
+                    if target:
+                        return [], f"{sh['id']}: chưa bật storyboard cho shot này."
+                    continue
+                if not redo and live_takes("storyboard", sh["id"]):
+                    continue
+                missing = [c for c in sh["cast"] if not pick("sheet", (_find_char(c) or {}).get("id", "")) and not in_progress("sheet", (_find_char(c) or {}).get("id", ""))]
+                if missing:
+                    if target:
+                        return [], f"{sh['id']}: thiếu sheet nhân vật {', '.join(missing)}."
+                    continue
+                model = st["storyboard_model"]
+                price = st["storyboard_price"] if "seedream" in model else IMAGE_PRICE.get(st["image_resolution"], 0.14)
+                out.append(dict(kind="storyboard", target=sh["id"], provider="wavespeed", model=model, units=1,
+                                 unit_price=price, label=f"Storyboard {sh['id']}"))
+        return out, None
+    if stage == "critique":
+        if not STATE.get("llm_vision_ok", True):
+            return [], "LLM không nhận ảnh — đã ẩn nút này."
+        kind, tgt = (target or "").split(":", 1) if target and ":" in target else (None, None)
+        if not kind or not pick(kind, tgt):
+            return [], "Chưa có ảnh để nhận xét."
+        est = llm_est(st["llm_review_in"], st["llm_review_out"], len(CRITIQUE_SYS), 300)
+        return [dict(kind="critique", target=target, provider="wavespeed", model=st["llm_review"], units=1,
+                     unit_price=round(est, 4), label=f"Nhận xét ảnh {target}")], None
+    if stage in ("prompt", "review"):
+        out = []
+        for ep in STATE["episodes"].values():
+            for b in ep["batches"]:
+                is_batch_target = target == b["id"]
+                is_ep_target = target == ep["id"]
+                if target and not is_batch_target and not is_ep_target:
+                    continue
+                if not redo and live_takes(stage, b["id"]):
+                    continue
+                if stage == "review" and not ep["prompts"].get(b["id"], {}).get("text"):
+                    if is_batch_target:
+                        return [], f"{b['id']}: chưa có prompt."
+                    continue
+                price_in, price_out = (st["llm_write_in"], st["llm_write_out"]) if stage == "prompt" else (st["llm_review_in"], st["llm_review_out"])
+                model = st["llm_write"] if stage == "prompt" else st["llm_review"]
+                est = llm_est(price_in, price_out, 1800, 900)
+                out.append(dict(kind=stage, target=b["id"], provider="wavespeed", model=model, units=1, unit_price=round(est, 4),
+                                 label=(STAGE_NAME[stage]) + " " + b["id"]))
+        return out, None
+    if stage == "gen":
+        out = []
+        for ep in STATE["episodes"].values():
+            for i, b in enumerate(ep["batches"]):
+                is_batch_target = target == b["id"]
+                is_ep_target = target == ep["id"]
+                if target and not is_batch_target and not is_ep_target:
+                    continue
+                if not redo and live_takes("gen", b["id"]):
+                    continue
+                if not ep["prompts"].get(b["id"], {}).get("approved"):
+                    if is_batch_target:
+                        return [], f"{b['id']}: prompt chưa được duyệt."
+                    continue
+                if i > 0:
+                    prev = ep["batches"][i - 1]
+                    prevj = pick("gen", prev["id"])
+                    if not (prevj and prevj.get("last_frame")):
+                        if is_batch_target:
+                            return [], f"{b['id']} cần khung hình cuối của {prev['id']} trước (chờ {prev['id']} xong)."
+                        continue
+                model, price = b["model"], float(b["price"])
+                spec = dict(kind="gen", target=b["id"], provider="atlas", model=model, units=b["duration"],
+                            unit_price=price, label=f"Sinh video {b['id']} · {b['duration']}s")
+                if not model_measured(model):
+                    spec["measure"] = True
+                    spec["label"] += " · đo giá thật lần đầu"
+                out.append(spec)
+        return out, None
+    if stage == "fix_img":
+        f = _find_fix_safe(target)
+        if not f:
+            return [], "Không có fix này."
+        if not redo and live_takes("fix_img", target):
+            return [], None
+        return [dict(kind="fix_img", target=target, provider="wavespeed", model="google/nano-banana-pro/edit",
+                     units=1, unit_price=IMAGE_PRICE[S()["image_resolution"]], label=f"Ảnh sửa {target}")], None
+    if stage == "patch":
+        f = _find_fix_safe(target)
+        if not f:
+            return [], "Không có fix này."
+        if not pick("fix_img", target) and not in_progress("fix_img", target):
+            return [], f"{target}: chưa có ảnh sửa được duyệt."
+        if not redo and live_takes("patch", target):
+            return [], None
+        _, b = batch_by_id(f["batch"])
+        dur = max(4, min(10, f["end"] - f["start"]))
+        return [dict(kind="patch", target=target, provider="atlas", model=b["model"], units=dur, unit_price=float(b["price"]),
+                     label=f"Vá {f['batch']} {f['start']}-{f['end']}s")], None
+    return [], "Bước không hợp lệ."
+
+
+def _find_fix_safe(fid):
+    if not fid:
+        return None
+    try:
+        return _find_fix(fid)
+    except ApiError:
+        return None
+
+
+def create_chat_job(kind, target, text, model, resolution, attachments=None, dry=False):
+    with LOCK:
+        if kind not in EDITABLE_IMAGE_KINDS:
+            return {"error": "Không sửa được loại ảnh này."}
+        base = pick(kind, target)
+        if not base:
+            return {"error": "Chưa có ảnh nào để sửa — tạo hoặc tải ảnh gốc trước."}
+        if not text.strip():
+            return {"error": "Chưa gõ yêu cầu sửa."}
+        if not KEYS.get(KEY_OF["wavespeed"]):
+            return {"error": "Chưa có WAVESPEED_API_KEY trong keys.txt."}
+        edits = [j for j in takes(kind, target) if j.get("edit") and j["status"] not in ("failed", "cancelled")]
+        limit = int(S().get("max_edits_per_image", 10))
+        if len(edits) >= limit:
+            return {"error": f"Đã sửa {limit} lần cho ảnh này (giới hạn trong Cài đặt)."}
+        price = image_price_for(model, resolution)
+        if dry:
+            return {"n": 1, "est": price, "items": [f"Sửa ảnh ({model}) · ~${price:.3f}"]}
+        spent, reserved = money()
+        if spent + reserved + price > budget() + 1e-9:
+            return {"error": f"Vượt trần: đã chi ~${spent:.2f} + đang chờ ~${reserved:.2f} + lần này ~${price:.3f} > trần ${budget():.2f}."}
+        chat_key = f"{kind}:{target}"
+        STATE["chats"].setdefault(chat_key, []).append({"role": "user", "text": text, "attachments": attachments or [], "t": ts()})
+        job = _new_job(kind, target, "wavespeed", model, 1, price, f"Sửa ảnh {kind}:{target}",
+                       {"edit": True, "chat_text": text, "resolution": resolution, "base_take": base["id"], "attachments": attachments or []})
+        save()
+        return {"ok": True, "job": job["id"]}
+
+
+def create_chat_attachment(data, ext, label, source, use):
+    if source not in ("ai", "real"):
+        raise ValueError("source phải là ai hoặc real.")
+    if use not in COMPONENT_USES:
+        raise ValueError("use không hợp lệ: " + use)
+    if source == "real" and use in ("face", "eyes"):
+        raise ValueError("Không dùng ảnh người thật cho mặt/mắt (hard rule: chỉ mặt AI).")
+    aid = f"attach_{STATE['job_n'] + 1}"
+    sub, fn = "02_Production/chat_attach", f"Attach_{slug(label, 20)}_{aid}{ext}"
+    dest = asset_dest(sub, fn)
+    dest.write_bytes(data)
+    job = register_local("chat_attach", aid, dest, meta={"label": label, "source": source, "use": use})
+    return job
+
+
+def create_jobs(stage, target=None, redo=False, dry=False):
+    with LOCK:
+        specs, err = specs_for(stage, target, redo)
+        if err:
+            return {"error": err}
+        for sp in specs:
+            if not KEYS.get(KEY_OF[sp["provider"]]):
+                return {"error": f"Chưa có {KEY_OF[sp['provider']]} trong keys.txt."}
+        if redo and target and stage == "gen":
+            limit = int(S().get("max_full_gens", 2))
+            if len(live_takes("gen", target)) >= limit:
+                return {"error": f"{target}: đã đủ {limit} lần tạo đầy đủ. Dùng 'Sửa đoạn hỏng' để vá từng đoạn."}
+        est = round(sum(sp["units"] * sp["unit_price"] for sp in specs), 4)
+        spent, reserved = money()
+        if specs and spent + reserved + est > budget() + 1e-9:
+            return {"error": f"Vượt trần: đã chi ~${spent:.2f} + đang chờ ~${reserved:.2f} + lần này ~${est:.2f} > trần ${budget():.2f}."}
+        res = {"n": len(specs), "est": est, "items": [sp["label"] + f" · ~${sp['units'] * sp['unit_price']:.3f}" for sp in specs]}
+        if dry or not specs:
+            return res
+        for sp in specs:
+            extra = {"measure": True} if sp.get("measure") else None
+            _new_job(sp["kind"], sp["target"], sp["provider"], sp["model"], sp["units"], sp["unit_price"], sp["label"], extra)
+            if redo:
+                STATE["picks"].pop(f"{sp['kind']}:{sp['target']}", None)
+        save()
+        log(f"Xếp hàng {len(specs)} việc ({stage}), ước tính ~${est:.3f}")
+        return res
+
+
+def deps_ready(job):
+    k, t = job["kind"], job["target"]
+    if k == "sheet" and not pick("portrait", t):
+        return (False, None) if in_progress("portrait", t) else (False, f"Thiếu ảnh nhân vật {t}.")
+    if k == "gen":
+        ep, b = batch_by_id(t)
+        i = batch_index(ep, t) if ep else -1
+        if i > 0:
+            prev = ep["batches"][i - 1]
+            prevj = pick("gen", prev["id"])
+            if not prevj:
+                return (False, None) if in_progress("gen", prev["id"]) else (False, f"Thiếu {prev['id']}.")
+            if not prevj.get("last_frame"):
+                return False, f"{prev['id']} xong nhưng chưa có khung hình cuối (return_last_frame)."
+    if k == "patch":
+        if not pick("fix_img", t):
+            return (False, None) if in_progress("fix_img", t) else (False, "Thiếu ảnh sửa đã duyệt.")
+    return True, None
+
+
+# ---------------------------------------------------------------- run / poll / scheduler
+def finish_fail(jid, err, keep_cost=False):
+    with LOCK:
+        j = STATE["jobs"][jid]
+        j["status"] = "failed"
+        j["error"] = scrub(err)[:700]
+        j["t_end"] = ts()
+        if not keep_cost:
+            j["cost"] = 0.0
+    save()
+    ledger(STATE["jobs"][jid], "lỗi: " + scrub(err)[:120], 0)
+    log(f"LỖI {jid}: {err}")
+
+
+def run_llm(jid):
+    with LOCK:
+        job = STATE["jobs"][jid]
+        job["status"] = "running"
+        st = dict(S())
+    ws = ws_client()
+    images = None
+    if job["kind"] == "split_episodes":
+        system, user = SPLIT_EPISODES_SYS, "Script/shot list:\n\n" + STATE["script_raw"] + "\n\nReturn the JSON object now."
+        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+    elif job["kind"] == "parse_list":
+        system, user = PARSE_LIST_SYS, "List file content:\n\n" + STATE["list_raw"] + "\n\nReturn the JSON object now."
+        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+    elif job["kind"] == "preprod":
+        system, user = PREPROD_SYS, "Screenplay:\n\n" + STATE["script_raw"]
+        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+    elif job["kind"] == "reflib_scan":
+        return run_reflib_scan(jid)
+    elif job["kind"] == "suggest_components":
+        cand = reflib_candidates()
+        c = STATE["chars"][job["target"]]
+        listing = "\n".join(f"{i}: source={src} use={use} label={label}" for i, (_k, _p, src, use, label) in enumerate(cand))
+        system, user = SUGGEST_COMPONENTS_SYS, f"Character description: {c['desc'] or c['name']}\n\nAvailable images:\n{listing}"
+        model, jm, pin, pout = st["llm_write"], True, st["llm_write_in"], st["llm_write_out"]
+    elif job["kind"] == "critique":
+        kind, tgt = job["target"].split(":", 1)
+        j = pick(kind, tgt)
+        if not j:
+            raise ApiError("Chưa có ảnh để nhận xét.")
+        images = [url_of(j)]
+        system, user = CRITIQUE_SYS, "Critique this reference image."
+        model, jm, pin, pout = st["llm_review"], False, st["llm_review_in"], st["llm_review_out"]
+    elif job["kind"] == "prompt":
+        bid = job["target"]
+        ep, b = batch_by_id(bid)
+        mapping = build_mapping(bid)
+        tmpl_struct = STATE["templates"].get("video_structure", "").strip()
+        tmpl_example = STATE["templates"].get("video_example", "").strip()
+        system = (tmpl_struct + ("\n\nExample:\n" + tmpl_example if tmpl_example else "") +
+                  "\n\nFollow this structure and voice exactly; change only the scene-specific content. "
+                  "Cite the exact @Image/@Audio/@Video numbers given to you, never invent one. Always end with: "
+                  "Prohibited: " + PROHIBITED + ".") if tmpl_struct else PROMPT_SYS_DEFAULT
+        user = (f"Batch tier: {b['tier']}. Location: {mapping['ctx']['location']}. Duration: {b['duration']}s.\n"
+                f"Reference mapping (use these numbers only):\n{mapping['text']}\n\n"
+                f"Beats: {json.dumps(mapping['ctx']['beats'], ensure_ascii=False)}\n"
+                f"Dialogue: {json.dumps(mapping['ctx']['lines'], ensure_ascii=False)}\nWrite the prompt now.")
+        model, jm, pin, pout = st["llm_write"], False, st["llm_write_in"], st["llm_write_out"]
+    else:  # review
+        bid = job["target"]
+        ep, b = batch_by_id(bid)
+        mapping = build_mapping(bid)
+        user = (f"Prompt:\n{ep['prompts'].get(bid, {}).get('text', '')}\n\nBatch JSON subset:\n"
+                f"{json.dumps({'beats': mapping['ctx']['beats'], 'lines': mapping['ctx']['lines']}, ensure_ascii=False)}")
+        system = REVIEW_SYS
+        model, jm, pin, pout = st["llm_review"], True, st["llm_review_in"], st["llm_review_out"]
+    log(f"Gọi {model} ({STAGE_NAME[job['kind']]}) — có thể mất 20-120 giây…")
+    try:
+        content, usage = ws.chat(model, system, user, jm, images=images)
+    except ApiError as e:
+        if images and e.code in (400, 422):
+            with LOCK:
+                STATE["llm_vision_ok"] = False
+            save()
+            raise ApiError("LLM không nhận ảnh đính kèm — đã ẩn nút Nhận xét ảnh. " + str(e))
+        raise
+    pt = usage.get("prompt_tokens") or int((len(system) + len(user)) / 3.5)
+    ct = usage.get("completion_tokens") or int(len(content) / 3.5)
+    cost = round(pt / 1e6 * pin + ct / 1e6 * pout, 5)
+    with LOCK:
+        job.update(cost=cost, tokens={"in": pt, "out": ct}, result=content, t_end=ts(), status="done")
+        try:
+            if job["kind"] == "split_episodes":
+                apply_split_episodes(parse_json(content))
+            elif job["kind"] == "parse_list":
+                apply_bank_data(parse_json(content), approved=False)
+            elif job["kind"] == "preprod":
+                apply_bank_data(parse_json(content), approved=False)
+            elif job["kind"] == "suggest_components":
+                apply_suggested_components(job["target"], parse_json(content))
+            elif job["kind"] == "prompt":
+                ep, b = batch_by_id(job["target"])
+                ep["prompts"].setdefault(job["target"], {})["text"] = content
+                ep["prompts"][job["target"]]["approved"] = False
+            elif job["kind"] == "review":
+                ep, b = batch_by_id(job["target"])
+                d = parse_json(content)
+                ep["prompts"].setdefault(job["target"], {})["review"] = d
+            elif job["kind"] == "critique":
+                chat_key = job["target"]
+                STATE["chats"].setdefault(chat_key, []).append({"role": "critique", "text": content, "job": jid, "t": ts()})
+        except Exception as e:
+            job["status"] = "failed"
+            job["error"] = f"Kết quả không đúng định dạng ({e}). Bấm tạo lại."
+    save()
+    ledger(job, "xong" if job["status"] == "done" else "lỗi định dạng", cost)
+    log(f"{'Xong' if job['status'] == 'done' else 'Lỗi'} {jid} · {pt}+{ct} token · ${cost:.4f}")
+
+
+def apply_split_episodes(data):
+    eps = data.get("episodes") or []
+    if not eps:
+        raise ValueError("Không tách được tập nào.")
+    for i, e in enumerate(eps):
+        eid = str(e.get("id") or f"EP{i + 1:02d}").strip() or f"EP{i + 1:02d}"
+        if not re.match(r"^EP\d+$", eid):
+            eid = f"EP{i + 1:02d}"
+        if eid not in STATE["episodes"]:
+            STATE["episodes"][eid] = {"id": eid, "name": str(e.get("name") or eid), "shots": [], "batches": [],
+                                      "prompts": {}, "qc": {}, "fixes": {}, "export": {}}
+            STATE["episodes_order"].append(eid)
+        STATE["episodes"][eid]["shots"] = normalize_shots_for_episode(eid, e.get("shots") or [])
+        STATE["episodes"][eid]["batches"] = split_batches(eid)
+
+
+def apply_suggested_components(char_id, data):
+    cand = reflib_candidates()
+    picks = data.get("picks") or []
+    c = STATE["chars"][char_id]
+    have = {cc["file"] for cc in c["components"]}
+    for idx in picks:
+        try:
+            _key, path, source, use, label = cand[int(idx)]
+        except (ValueError, IndexError, TypeError):
+            continue
+        if source == "real" and use in ("face", "eyes"):
+            continue  # hard rule, enforced again here even though the prompt already says so
+        if path in have:
+            continue
+        c["components"].append({"id": f"c{next_version(f'component:{char_id}')}", "file": path, "label": label,
+                                "source": source, "use": use, "created": ts(), "url": None, "reflib": True})
+
+
+def run_reflib_scan(jid):
+    job = STATE["jobs"][jid]
+    st = S()
+    new = reflib_unscanned()
+    ws = ws_client()
+    tagged, cost_total = 0, 0.0
+    for path, source in new:
+        label, use = path.stem.replace("_", " ").replace("-", " "), "other"
+        try:
+            url = ws.upload_local(path)
+            content, usage = ws.chat(st["llm_review"], REFLIB_TAG_SYS, "Tag this image.", True, images=[url])
+            d = parse_json(content)
+            label = str(d.get("label") or label)[:80]
+            if d.get("use") in COMPONENT_USES:
+                use = d["use"]
+            pt = usage.get("prompt_tokens") or 200
+            ct = usage.get("completion_tokens") or 30
+            cost_total += pt / 1e6 * st["llm_review_in"] + ct / 1e6 * st["llm_review_out"]
+        except ApiError as e:
+            if e.code in (400, 422):
+                with LOCK:
+                    STATE["llm_vision_ok"] = False
+            log(f"Không gắn nhãn được {path.name} bằng LLM ({e}) — dùng tên file làm nhãn.")
+        if source == "real" and use in ("face", "eyes"):
+            use = "other"  # hard rule: never auto-tag a real photo as face/eyes
+        with LOCK:
+            STATE["reflib"]["scanned"][reflib_key(path)] = {"label": label, "source": source, "use": use, "t": ts()}
+        tagged += 1
+        save()
+    with LOCK:
+        job.update(cost=round(cost_total, 5), status="done", t_end=ts(), result=f"Đã quét {tagged} ảnh mới.")
+    save()
+    ledger(job, "xong", cost_total)
+    log(f"Quét kho ref: {tagged} ảnh mới")
+
+
+def _dest_for(job, ext):
+    k, t, v = job["kind"], job["target"], job["take"]
+    if k == "portrait":
+        return asset_dest(*make_filename("portrait", v, ext, name=STATE["chars"][t]["name"], label=STATE["chars"][t]["desc"] or "look"))
+    if k == "sheet":
+        return asset_dest(*make_filename("sheet", v, ext, name=STATE["chars"][t]["name"]))
+    if k in ("env_wide", "env_rev"):
+        e = STATE["envs"][t]
+        return asset_dest(*make_filename(k, v, ext, name=e["name"], label=e["tag"]))
+    if k == "prop":
+        return asset_dest(*make_filename("prop", v, ext, name=STATE["props"][t]["name"]))
+    if k == "storyboard":
+        return asset_dest(*make_filename("storyboard", v, ext, name=t))
+    if k == "fix_img":
+        f = _find_fix(t)
+        return asset_dest("02_Production/frames", f"Fix_{slug(f['batch'])}_{f['start']}-{f['end']}s_v{v}{ext}")
+    if k == "patch":
+        f = _find_fix(t)
+        ep, _ = batch_by_id(f["batch"])
+        return asset_dest(f"02_Production/{ep['id']}", f"{proj_name()}_{ep['id']}_Video_{f['batch']}_patch_{f['start']}-{f['end']}s_v{v}{ext}")
+    if k == "gen":
+        ep, _ = batch_by_id(t)
+        return asset_dest(f"02_Production/{ep['id']}", f"{proj_name()}_{ep['id']}_Video_{t}_v{v}{ext}")
+    return OUT / "media" / k / f"{slug(t)}_t{v}{ext}"
+
+
+def run_media(jid):
+    with LOCK:
+        job = STATE["jobs"][jid]
+        resume = bool(job.get("pid"))
+    if not resume:
+        body, prompt, extra = build_body(job)  # may hit the network (uploads, chat/template rewrite) — no LOCK held
+        with LOCK:
+            if extra and extra.get("rewrite_cost"):
+                job["est"] = round(job["est"] + extra["rewrite_cost"], 4)
+            spent, _ = money()
+            if spent + job["est"] > budget() + 1e-9:
+                raise ApiError(f"Dừng: sẽ vượt trần ${budget():.2f}.")
+            job.update(body=body, prompt=prompt, status="running")
+            if extra:
+                job.update(extra)
+    else:
+        with LOCK:
+            job["status"] = "running"
+    is_video = job["kind"] in VIDEO_KINDS
+    client = atlas_client() if is_video else ws_client()
+    measure = job.get("measure") and not resume
+    before = mid = None
+    if measure:
+        before = read_balance(job["provider"])
+    if not resume:
+        pid = client.submit_video(job["model"], job["body"]) if is_video else client.submit_media(job["model"], job["body"])
+        with LOCK:
+            job.update(pid=pid, cost=job["est"], t_submit=time.time(), submitted=ts())
+        save()
+        ledger(job, "đã gửi", job["est"])
+        log(f"Đã gửi {jid} (~${job['est']:.3f})")
+        if measure:
+            time.sleep(MEASURE_WAIT)
+            mid = read_balance(job["provider"])
+    else:
+        log(f"Hỏi tiếp {jid} (đã gửi từ trước, không tính tiền lại)")
+    limit = (45 if is_video else 15) * 60
+    t0 = time.time()
+    while True:
+        time.sleep(POLL_SLEEP)
+        try:
+            status, val, last_frame = client.result(job["pid"])
+        except ApiError as e:
+            log(f"(chưa hỏi được {jid}: {e}; sẽ hỏi lại)")
+            status, val, last_frame = "running", None, None
+        if status == "running":
+            if time.time() - t0 > limit:
+                with LOCK:
+                    job.update(status="stalled", error=f"Quá {limit // 60} phút chưa xong. Bấm 'Hỏi lại'.")
+                save()
+                return
+            continue
+        break
+    if status == "failed":
+        finish_fail(jid, f"Nhà cung cấp báo lỗi: {val}")
+        return
+    with LOCK:
+        job["url"] = val
+        if last_frame:
+            job["last_frame"] = last_frame
+    save()
+    ext = providers.ext_for(val)
+    dest = _dest_for(job, ext)
+    try:
+        providers.download(val, dest)
+        with LOCK:
+            job["file"] = str(dest.relative_to(HERE))
+    except Exception as e:
+        with LOCK:
+            job["dl_error"] = scrub(str(e))
+        log(f"Tải {jid} về máy thất bại ({e}); vẫn xem được qua link.")
+    if measure:
+        time.sleep(MEASURE_WAIT)
+        after = read_balance(job["provider"])
+        vals = [v for v in (mid, after) if v is not None]
+        charge = round(before - min(vals), 4) if before is not None and vals else None
+        per_unit = round(charge / job["units"], 4) if charge is not None and job["units"] else None
+        with LOCK:
+            job["measured"] = {"before": before, "mid": mid, "after": after, "charge": charge, "per_unit": per_unit}
+        if charge is not None:
+            ledger(job, f"đo giá thật: số dư giảm ${charge:.4f}", 0)
+            log(f"Đo giá {job['model']}: ${charge:.4f} cho {job['units']} giây = ${per_unit}/giây")
+        if per_unit is not None:
+            apply_measured_price(job["target"], job["model"], per_unit)
+    with LOCK:
+        job.update(status="done", t_end=ts())
+        STATE["picks"][f"{job['kind']}:{job['target']}"] = job["id"]
+    save()
+    ledger(job, "xong", 0)
+    log(f"Xong {jid}")
+
+
+def apply_measured_price(bid, model, per_unit):
+    """Use the real measured price from now on; if 2.5 measures above $0.16/s, warn and switch any
+    not-yet-generated 2.5 batch (in the SAME episode) to 2.0 (owner can switch back by hand)."""
+    with LOCK:
+        ep, b = batch_by_id(bid)
+        if b:
+            b["price"] = per_unit
+        if "seedance-2.5" in model and per_unit > PRICE_WARN_PER_S and ep:
+            log(f"CẢNH BÁO: {model} đo được ${per_unit}/s, cao hơn $0.16/s dự kiến.")
+            for other in ep["batches"]:
+                if other["id"] == bid or live_takes("gen", other["id"]):
+                    continue
+                if "seedance-2.5" in other["model"]:
+                    other["model"] = "bytedance/seedance-2.0/reference-to-video"
+                    other["price"] = 0.09
+                    log(f"Đã đổi {other['id']} sang Seedance 2.0 (giá 2.5 đo được cao). Đổi lại bằng tay nếu muốn.")
+    save()
+
+
+def run_job(jid):
+    try:
+        if STATE["jobs"][jid]["kind"] in LLM_KINDS:
+            run_llm(jid)
+        else:
+            run_media(jid)
+    except Exception as e:
+        job = STATE["jobs"][jid]
+        if job["status"] != "done":
+            if job.get("pid"):
+                with LOCK:
+                    job.update(status="stalled", error=f"Lỗi khi chờ kết quả: {scrub(str(e))} — bấm 'Hỏi lại'.")
+                save()
+            else:
+                finish_fail(jid, str(e))
+        if not isinstance(e, ApiError):
+            log(traceback.format_exc())
+    finally:
+        with LOCK:
+            RUNNING.discard(jid)
+            prov = STATE["jobs"][jid]["provider"]
+            if SOLO.get(prov) == jid:
+                SOLO.pop(prov, None)
+            idle = not RUNNING and not any(j["status"] == "queued" for j in STATE["jobs"].values())
+        if idle and STATE["jobs"][jid]["kind"] not in LLM_KINDS:
+            refresh_balances()
+
+
+def scheduler():
+    while True:
+        time.sleep(0.4)
+        try:
+            with LOCK:
+                limit = max(1, int(S().get("parallel", 2)))
+                queued = sorted((j for j in STATE["jobs"].values() if j["status"] == "queued"), key=lambda j: j["n"])
+                for job in queued:
+                    if len(RUNNING) >= limit:
+                        break
+                    prov = job["provider"]
+                    holder = SOLO.get(prov)
+                    if holder and holder != job["id"]:
+                        continue
+                    if job.get("measure"):
+                        SOLO[prov] = job["id"]  # reserve the provider, then wait until it is idle
+                        if any(STATE["jobs"][r]["provider"] == prov for r in RUNNING):
+                            continue
+                    ready, why = deps_ready(job)
+                    if why:
+                        job.update(status="failed", error=why, t_end=ts())
+                        if SOLO.get(prov) == job["id"]:
+                            SOLO.pop(prov, None)
+                        save()
+                        continue
+                    if not ready:
+                        continue
+                    job["status"] = "starting"
+                    RUNNING.add(job["id"])
+                    threading.Thread(target=run_job, args=(job["id"],), daemon=True).start()
+        except Exception:
+            log(traceback.format_exc())
+
+
+# ---------------------------------------------------------------- fixes (Sửa đoạn hỏng, per batch)
+def new_fix(bid, start, end):
+    ep, b = batch_by_id(bid)
+    if not b:
+        raise ValueError("batch không hợp lệ.")
+    start, end = int(start), int(end)
+    if end - start < 4:
+        end = start + 4
+    if end - start > 10:
+        end = start + 10
+    clip = pick("gen", bid)
+    if not clip or not clip.get("file"):
+        raise ValueError(f"{bid}: chưa có clip trên máy để cắt khung hình.")
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        raise ValueError("Máy chưa có ffmpeg — cài rồi thử lại (winget install Gyan.FFmpeg).")
+    fid = f"fix_{sum(len(e['fixes']) for e in STATE['episodes'].values()) + 1}"
+    frame_path = OUT / "media" / "frame" / f"{fid}.jpg"
+    frame_path.parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run([ff, "-y", "-v", "error", "-ss", str(start), "-i", str(HERE / clip["file"]),
+                        "-frames:v", "1", str(frame_path)], capture_output=True, text=True, errors="replace")
+    if r.returncode != 0:
+        raise ValueError("ffmpeg lỗi khi cắt khung hình: " + r.stderr[-300:])
+    ep["fixes"][fid] = {"id": fid, "batch": bid, "start": start, "end": end, "prompt": "", "created": ts()}
+    save()
+    register_local("frame", fid, frame_path)
+    return ep["fixes"][fid]
+
+
+# ---------------------------------------------------------------- export (spec §5.7, per episode)
+def do_export(eid):
+    ep = episode(eid)
+    proj = proj_name()
+    dst = HERE / "export" / eid
+    dst.mkdir(parents=True, exist_ok=True)
+    lines, files = [], []
+    order = [b["id"] for b in ep["batches"]]
+    for bid in order:
+        j = pick("gen", bid)
+        if j and j.get("file"):
+            name = Path(j["file"]).name
+            shutil.copy2(HERE / j["file"], dst / name)
+            b = next(x for x in ep["batches"] if x["id"] == bid)
+            lines.append(f"{bid}\t{name}\t0-{b['duration']}s")
+            files.append(name)
+    for fid, f in ep["fixes"].items():
+        j = pick("patch", fid)
+        if j and j.get("file"):
+            name = Path(j["file"]).name
+            shutil.copy2(HERE / j["file"], dst / name)
+            lines.append(f"{f['batch']} patch\t{name}\t{f['start']}-{f['end']}s")
+            files.append(name)
+    (dst / "danh_sach.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ff = shutil.which("ffmpeg")
+    joined = None
+    if ff:
+        clips = [pick("gen", b) for b in order if pick("gen", b) and pick("gen", b).get("file")]
+        if clips and len(clips) == len(order):
+            listfile = dst / "list.txt"
+            listfile.write_text("".join(f"file '{Path(c['file']).name}'\n" for c in clips), encoding="utf-8")
+            out = dst / f"{proj}_{eid}_full.mp4"
+            r = subprocess.run([ff, "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listfile),
+                                "-c", "copy", str(out)], capture_output=True, text=True, errors="replace", cwd=dst)
+            if r.returncode == 0:
+                joined = out.name
+    with LOCK:
+        ep["export"] = {"status": "done", "dir": str(dst.relative_to(HERE)), "n": len(lines), "t": ts(),
+                        "joined": joined, "files": files}
+    save()
+    log(f"Đã xuất {len(lines)} file vào {dst}")
+
+
+# ---------------------------------------------------------------- cost / projection / public state
+def cost_summary():
+    spent, reserved = money()
+    real = None
+    for p in ("wavespeed", "atlas"):
+        b = STATE["balance"].get(p, {})
+        if b.get("start") is not None and b.get("now") is not None:
+            real = (real or 0) + b["start"] - b["now"]
+    series_spent = round(sum(j.get("cost", 0) for j in STATE["jobs"].values()
+                              if j["kind"] in SERIES_KINDS and j["status"] in ("done", "stalled")), 4)
+    episode_spent = round(spent - series_spent, 4)
+    basis = real if real is not None else spent
+    basis_episode = max(0.0, basis - series_spent)
+    projection = round((basis_episode * N_EPISODES + series_spent) * VND_PER_USD)
+    return {"spent": spent, "reserved": reserved, "real": real, "series_spent": series_spent,
+            "episode_spent": episode_spent, "projection_vnd": projection, "target_vnd": TARGET_VND,
+            "contract_vnd": CONTRACT_VND, "cap_usd": budget()}
+
+
+def mapping_preview(bid):
+    try:
+        m = build_mapping(bid)
+        return m["text"]
+    except Exception as e:
+        return "(chưa đủ dữ liệu để dựng tham chiếu: " + str(e) + ")"
+
+
+def public_state():
+    with LOCK:
+        jobs = [{k: j.get(k) for k in ("id", "kind", "target", "take", "status", "model", "est", "cost", "error",
+                                        "file", "url", "last_frame", "created", "label", "tokens", "units",
+                                        "unit_price", "prompt", "dl_error", "result", "provider", "measure", "measured",
+                                        "dur", "edit", "resolution")}
+                for j in sorted(STATE["jobs"].values(), key=lambda j: j["n"])]
+        todo = {}
+        for stage in ("split_episodes", "parse_list", "preprod", "reflib_scan", "portrait", "sheet", "env_wide", "env_rev", "prop", "prompt", "review", "gen"):
+            specs, err = specs_for(stage)
+            todo[stage] = {"n": len(specs), "est": round(sum(sp["units"] * sp["unit_price"] for sp in specs), 4), "error": err}
+        by_stage = {}
+        for j in STATE["jobs"].values():
+            b = by_stage.setdefault(j["kind"], {"done": 0, "failed": 0, "active": 0, "spent": 0.0})
+            if j["status"] == "done":
+                b["done"] += 1
+            elif j["status"] in ("failed", "cancelled"):
+                b["failed"] += 1
+            else:
+                b["active"] += 1
+            if j["status"] in ("done", "stalled") or (j["status"] == "running" and j.get("pid")):
+                b["spent"] = round(b["spent"] + j.get("cost", 0), 4)
+        mapping = {}
+        for ep in STATE["episodes"].values():
+            for b in ep["batches"]:
+                mapping[b["id"]] = mapping_preview(b["id"])
+        return {"token_ok": True, "project": STATE["project"], "script_raw": STATE["script_raw"],
+                "list_raw": STATE["list_raw"], "style": STATE["style"], "templates": STATE["templates"],
+                "reflib": {"path": STATE["reflib"]["path"], "n_scanned": len(STATE["reflib"]["scanned"]),
+                          "n_unscanned": len(reflib_unscanned()) if STATE["reflib"]["path"] else 0},
+                "episodes": STATE["episodes"], "episodes_order": STATE["episodes_order"],
+                "chars": STATE["chars"], "envs": STATE["envs"], "props": STATE["props"], "voices": STATE["voices"],
+                "video_refs": STATE["video_refs"], "settings": STATE["settings"],
+                "chats": STATE["chats"], "llm_vision_ok": STATE.get("llm_vision_ok", True),
+                "jobs": jobs, "picks": STATE["picks"], "todo": todo, "by_stage": by_stage, "budget": budget(),
+                "keys": {p: bool(KEYS.get(k)) for p, k in KEY_OF.items()}, "money": {"spent": money()[0], "reserved": money()[1]},
+                "balance": STATE["balance"], "cost": cost_summary(), "component_uses": COMPONENT_USES,
+                "ffmpeg": bool(shutil.which("ffmpeg")), "tier_name": TIER_NAME,
+                "running": len(RUNNING), "stage_names": STAGE_NAME,
+                "series_kinds": sorted(SERIES_KINDS), "mapping": mapping}
