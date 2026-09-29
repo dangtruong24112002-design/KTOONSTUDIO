@@ -1,0 +1,49 @@
+FORGE — GIAI ĐOẠN 1 (LÕI SẢN XUẤT) của brief "Tool gen video AI tối ưu (phân tích Giant Studio)"
+==================================================================================================
+Đây là app mới, tách hẳn khỏi tap1/ và tap_thu_v2/ (2 cái đó vẫn giữ nguyên). forge làm đúng phần
+"Giai đoạn 1" trong brief bạn đưa: Series → Episode → Sequence → Shot, Reference Bank, Bible/Style
+Preset, prompt compiler tự động (không dán tay), gọi Seedance sinh video, kiểm tra trước khi tốn
+tiền (pre-flight), theo dõi chi phí. CHƯA có previz/draft bắt buộc, CHƯA có LLM tự tách kịch bản
+thành shot, CHƯA có timeline duyệt trong tool — đó là Giai đoạn 2-4, làm sau khi bạn duyệt cái này.
+
+Nhà cung cấp: vẫn dùng WaveSpeed (upload ảnh/video ref) + Atlas Cloud (Seedance) — không đổi sang
+Avis/Atrium/BytePlus như brief nhắc (đó là nhà cung cấp của Giant Studio, không bắt buộc cho tool
+này). Nếu bạn đã lưu key qua tap1/tap_thu_v2 rồi thì dùng lại luôn, không cần dán lại.
+
+BƯỚC 1 — Dán key (bỏ qua nếu đã có ~/.ktoon/keys.txt từ tap1/tap_thu_v2)
+  Mở forge\keys.txt (nếu chưa có, mở app 1 lần rồi đóng lại — app tự tạo file trống ở thư mục nhà,
+  C:\Users\<tên>\.ktoon\keys.txt). Dán WAVESPEED_API_KEY và ATLASCLOUD_API_KEY vào, lưu lại.
+
+BƯỚC 2 — Mở app
+  Windows: bấm đúp chay_forge.bat trong thư mục forge. Trình duyệt tự mở (cổng gần 8940).
+  Giữ cửa sổ đen mở trong lúc dùng — đóng là tắt app; việc đang render sẽ tiếp tục khi mở lại.
+
+BƯỚC 3 — Làm theo đúng thứ tự trên trang
+  1 Series & Bible: tạo 1 dự án (mã + tên + trần chi USD — mỗi dự án có ngân sách riêng, không dùng
+    chung với tap1/tap_thu_v2). Điền Style lock (tiếng Anh), danh sách cấm (mỗi dòng 1 mục, vd "no
+    3D CGI"), quy tắc âm thanh — những thứ này tự động chèn vào MỌI prompt của dự án, không phải
+    chép lại từng lần như Giant Studio. Roster nhân vật/bối cảnh chỉ để nhớ tên gọi cố định.
+  2 Reference Bank: tải ảnh/video tham chiếu lên — chọn loại (character/location/keyframe/
+    style_video/audio) và đặt @tên. Asset thuộc về CẢ DỰ ÁN, dùng lại ở mọi episode/sequence sau
+    này bằng cách chọn trong bảng shot, không phải tải lại hay tạo node mới mỗi lần.
+  3 Episode → Sequence → Shot: tạo tập, rồi tạo sequence (thời lượng, model Seedance 2.5/2.0, khổ
+    hình, overview), rồi thêm từng shot (thời gian bắt đầu/kết thúc, framing, camera, hành động,
+    thoại, SFX, chọn asset nào xuất hiện trong shot đó). Bấm "Xem trước prompt + pre-flight" để
+    kiểm tra: đủ shot chưa, tổng thời lượng khớp chưa, số ref có vượt giới hạn model không, prompt
+    đã ghép đúng chưa — kiểm tra này MIỄN PHÍ, làm trước khi bấm Render.
+  4 Render: bấm "Render" — app hiện tổng tiền ước tính, bấm xác nhận mới chạy. Video xem ngay trên
+    trang. Bấm "Giữ (Kept)" hoặc "Bỏ (Re-roll)" sau khi xem, kèm được lý do — dữ liệu này để sau
+    tính tỉ lệ Kept/Total (chỉ số brief muốn theo dõi). "Render lại" tối đa 2 lần/sequence.
+
+CHI PHÍ
+  Mỗi dự án (series) có trần chi riêng, sửa được trong mục Series & Bible. Chi tiết từng lần gọi:
+  forge\output\so_chi.csv — Nhật ký: forge\output\nhat_ky.txt
+
+KHI CÓ LỖI
+  Lỗi hiện ngay dưới nút liên quan. Đóng app giữa chừng không sao — việc đang gửi tự hỏi tiếp khi mở
+  lại, không tính tiền lại.
+
+CHƯA XÁC NHẬN GIÁ THẬT
+  Giá Seedance 2.5 ($0.134/s) và 2.0 ($0.09/s) dùng đúng giá đã đo thật trong tap_thu_v2 — chưa đo
+  lại riêng cho forge. Brief còn nhắc Seedance 2.0 Fast/Mini/1.5 Pro/1.0 Pro — CHƯA thêm vào vì chưa
+  có giá WaveSpeed/Atlas xác nhận, tránh đoán giá cho tiền thật.

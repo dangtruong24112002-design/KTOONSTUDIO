@@ -81,3 +81,15 @@
   hết tiền/sai key báo riêng rõ ràng. Tái dùng nguyên cách gọi API, đọc key (tap1\keys.txt rồi
   ~/.ktoon/keys.txt), sổ chi và cơ chế resume từ `tap_thu_v2/` (copy + rút gọn, không import chéo). Test
   bằng API giả (`ktoon_tap_thu/tests_mock/tap1_check.py`, 39 bước) — pass.
+- 2026-09-29 Thêm `forge/` — Giai đoạn 1 (Lõi sản xuất) của brief "Tool gen video AI tối ưu (phân tích
+  Giant Studio)", thư mục mới riêng, không đụng `tap1/`/`tap_thu_v2/`. Series → Episode → Sequence → Shot;
+  mỗi series có Bible riêng (style lock, danh sách cấm, quy tắc âm thanh, roster nhân vật/bối cảnh) và
+  ngân sách riêng; Reference Bank cấp series — asset tải lên 1 lần, dùng lại bằng @tên ở mọi
+  episode/sequence, không tạo node trùng lặp như Giant Studio. Prompt compiler ghép Bible + shot thành
+  prompt Seedance đúng cấu trúc (Reference Bank/Target style/Overview/SHOT n+timestamp/Negative) bằng
+  TEMPLATE thuần, không gọi LLM. Pre-flight check miễn phí trước khi trừ tiền (thiếu shot, lệch thời
+  lượng, vượt số ref của model, sót thẻ rác). Render qua Atlas Cloud (Seedance 2.5/2.0, giữ đúng giá đã
+  đo thật, không đổi sang Avis/Atrium/BytePlus như brief của Giant Studio dùng), hiện tổng tiền ước tính
+  trước khi xác nhận, tối đa 2 lần render/sequence, đánh dấu Kept/Re-roll kèm lý do. Tái dùng nguyên cách
+  đọc key, sổ chi và cơ chế resume từ tap1/tap_thu_v2. Test bằng API giả
+  (`ktoon_tap_thu/tests_mock/forge_check.py`, 34 bước) — pass.

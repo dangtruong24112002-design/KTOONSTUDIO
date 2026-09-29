@@ -28,8 +28,10 @@ tap_thu_v2/.update_backup/
 ktoon_tap_thu/tests_mock/run_v1/
 ktoon_tap_thu/tests_mock/run_v2/
 ktoon_tap_thu/tests_mock/run_tap1/
+ktoon_tap_thu/tests_mock/run_forge/
 ktoon_tap_thu/tests_mock/mock_v2.*
 ktoon_tap_thu/tests_mock/mock_tap1.*
+ktoon_tap_thu/tests_mock/mock_forge.*
 ktoon_tap_thu/tests_mock/mock_log.json
 ktoon_tap_thu/tests_mock/shots/
 ktoon_tap_thu/tests_mock/shots_v2/

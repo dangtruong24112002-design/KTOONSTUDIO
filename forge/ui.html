@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forge — Lõi sản xuất</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; background: #f4f5f7; color: #1c1e21; }
+  header { position: sticky; top: 0; z-index: 5; background: #1c2530; color: #fff; padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; font-size: 13px; }
+  header select, header input { background: #2c3a4c; color: #fff; border: 1px solid #46566b; border-radius: 6px; padding: 4px 6px; }
+  header .sp { flex: 1; }
+  main { max-width: 980px; margin: 0 auto; padding: 14px; }
+  section.card { background: #fff; border: 1px solid #e2e4e8; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  h2 { font-size: 14px; margin: 14px 0 6px; color: #555; }
+  h3 { font-size: 13px; margin: 10px 0 4px; color: #667; }
+  p.hint { color: #667; font-size: 12.5px; line-height: 1.5; margin: 4px 0 10px; }
+  textarea, input[type=text], input[type=number] { width: 100%; font: inherit; font-size: 13px; border: 1px solid #d3d7dd; border-radius: 6px;
+    padding: 6px 8px; resize: vertical; }
+  textarea { min-height: 54px; }
+  label.fld { display: block; font-size: 12.5px; color: #555; margin: 6px 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  button { font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 6px; border: 1px solid #cfd4db;
+    background: #fff; cursor: pointer; }
+  button.primary { background: #2457d9; border-color: #2457d9; color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.link { border: none; background: none; color: #b3261e; text-decoration: underline; padding: 2px 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid #e2e4e8; border-radius: 8px; padding: 8px; background: #fafbfc; }
+  .tile img, .tile video { width: 100%; border-radius: 6px; background: #111; max-height: 160px; object-fit: cover; }
+  .chip { display: inline-block; background: #eef1f6; border-radius: 20px; padding: 2px 8px; font-size: 11.5px; color: #445; }
+  .warn { background: #fff4e5; border: 1px solid #ffd7a0; color: #7a4a00; border-radius: 6px; padding: 6px 8px; font-size: 12px; margin: 6px 0; }
+  .err { color: #b3261e; font-size: 12px; margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 6px 0; }
+  table th, table td { border: 1px solid #e2e4e8; padding: 5px 6px; vertical-align: top; }
+  table th { background: #f6f7f9; text-align: left; font-weight: 600; }
+  table td textarea, table td input { min-height: 34px; }
+  select[multiple] { min-height: 70px; }
+  .ep-block { border-left: 3px solid #2457d9; padding-left: 12px; margin: 12px 0; }
+  .seq-block { border: 1px solid #e2e4e8; border-radius: 8px; padding: 10px; margin: 8px 0; background: #fbfcfd; }
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid #ccc; border-top-color: #2457d9;
+    border-radius: 50%; animation: sp 0.7s linear infinite; margin-right: 5px; vertical-align: -1px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #toast { position: fixed; right: 12px; bottom: 12px; z-index: 50; display: flex; flex-direction: column; gap: 6px; }
+  #toast div { background: #1c2530; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; max-width: 320px; }
+  #toast div.bad { background: #7a2018; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 60; }
+  #modal .box { background: #fff; border-radius: 10px; padding: 18px; max-width: 460px; width: 92%; }
+  #modal ul { font-size: 13px; max-height: 260px; overflow: auto; padding-left: 18px; }
+  #offline { position: fixed; inset: 0; background: #1c2530; color: #fff; display: flex; align-items: center;
+    justify-content: center; text-align: center; padding: 20px; z-index: 99; }
+</style>
+</head>
+<body>
+<header id="hdr"></header>
+<main id="main"></main>
+<div id="toast"></div>
+<div id="modal" hidden><div class="box">
+  <h1 id="mTitle"></h1>
+  <div id="mBody"></div>
+  <div class="row" style="justify-content:flex-end">
+    <button id="mCancel">Huỷ</button>
+    <button class="primary" id="mOk">Chạy</button>
+  </div>
+</div></div>
+<div id="offline" hidden>Mất kết nối tới app — kiểm tra cửa sổ chạy app còn mở không, hoặc bấm F5.</div>
+<script>
+const TOKEN = "__FORGE_TOKEN__";
+const $ = s => document.querySelector(s);
+let S = null, fatal = false, typing = false;
+document.addEventListener("focusin", e => { if (e.target.matches("textarea, input[type=text], input[type=number]")) typing = true; });
+document.addEventListener("focusout", e => { if (e.target.matches("textarea, input[type=text], input[type=number]")) typing = false; });
+
+async function api(path, body) {
+  const opt = { headers: { "X-Forge-Token": TOKEN } };
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (r.status === 403) {
+    fatal = true; $("#offline").hidden = false;
+    $("#offline").textContent = "App vừa mở lại hoặc đang chạy 2 cửa sổ cùng lúc — bấm F5 (tự tải lại nếu bạn không đang gõ dở).";
+    if (!typing) setTimeout(() => location.reload(), 2000);
+    throw new Error("token");
+  }
+  return r.json();
+}
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function usd(n, d) { return "$" + Number(n || 0).toFixed(d == null ? 2 : d); }
+function toast(msg, bad) {
+  const d = document.createElement("div"); d.textContent = msg; if (bad) d.className = "bad";
+  $("#toast").appendChild(d); setTimeout(() => d.remove(), bad ? 9000 : 4000);
+}
+function ask(title, html) {
+  return new Promise(res => {
+    $("#mTitle").textContent = title; $("#mBody").innerHTML = html;
+    $("#modal").hidden = false;
+    const done = v => { $("#modal").hidden = true; $("#mOk").onclick = null; $("#mCancel").onclick = null; res(v); };
+    $("#mOk").onclick = () => done(true);
+    $("#mCancel").onclick = () => done(false);
+  });
+}
+const ACTIVE = ["queued", "starting", "running"];
+function jobsFor(kind, target) { return (S.jobs || []).filter(j => j.kind === kind && j.target === target); }
+
+async function refresh() {
+  if (fatal) return;
+  try { S = await api("/api/state"); } catch (e) { return; }
+  if (fatal) return;
+  $("#offline").hidden = true;
+  renderHeader();
+  renderMain();
+}
+
+function activeSeries() { return S.active_series && S.series[S.active_series]; }
+
+function renderHeader() {
+  const ser = activeSeries();
+  const bw = (S.balance.wavespeed || {}).now, ba = (S.balance.atlas || {}).now;
+  $("#hdr").innerHTML = `<b>forge</b>
+    <label>Dự án: <select id="seriesSel">${S.series_order.map(sid => `<option value="${sid}" ${sid === S.active_series ? "selected" : ""}>${esc(S.series[sid].name)} (${esc(S.series[sid].code)})</option>`).join("")}${!S.series_order.length ? '<option value="">(chưa có dự án nào)</option>' : ""}</select></label>
+    <button data-act="new-series">+ Dự án mới</button>
+    ${ser ? `<span>Trần dự án: ${usd(ser.budget_usd)}</span>` : ""}
+    <span>Số dư WaveSpeed: ${bw == null ? "?" : usd(bw)} · Atlas: ${ba == null ? "?" : usd(ba)}</span>
+    <span class="sp"></span>`;
+  $("#seriesSel").onchange = async e => { await api("/api/series/select", { id: e.target.value }); await refresh(); };
+}
+
+function newSeriesRow() {
+  return `<div class="tile"><h3>+ Dự án (Series) mới</h3>
+    <input id="nsCode" placeholder="Mã series (vd MOGUTV_26010)">
+    <input id="nsName" placeholder="Tên hiển thị" style="margin-top:4px">
+    <input id="nsBudget" type="number" placeholder="Trần chi (USD, mặc định 40)" style="margin-top:4px">
+    <div class="row"><button data-act="create-series">Tạo dự án</button></div></div>`;
+}
+
+function assetTile(a) {
+  const isImg = !/\.(mp4|mov|webm)$/i.test(a.file || "");
+  return `<div class="tile">
+    ${isImg ? `<img src="/files/${a.file}">` : `<video src="/files/${a.file}" controls></video>`}
+    <div><b>@${esc(a.name)}</b> <span class="chip">${esc(a.kind)}</span></div>
+    <div class="row"><button class="link" data-act="remove-asset" data-id="${a.id}">Xoá</button></div>
+  </div>`;
+}
+
+function secBible() {
+  const ser = activeSeries();
+  if (!ser) return `<section class="card"><h1>Series & Bible</h1><p class="hint">Chưa có dự án nào — tạo 1 dự án ở thanh trên cùng.</p>${newSeriesRow()}</section>`;
+  const b = ser.bible;
+  return `<section class="card"><h1>1. Series & Bible — ${esc(ser.name)}</h1>
+    <p class="hint">Style lock + danh sách cấm + quy tắc âm thanh dùng chung cho MỌI sequence của dự án này — sửa 1 lần,
+    prompt compiler tự ghép vào mỗi lần biên soạn (không phải chép lại từng prompt như Giant Studio).</p>
+    <div class="row"><label class="fld" style="flex:1">Trần chi dự án (USD)<input id="budgetInput" type="number" value="${ser.budget_usd}"></label>
+      <button data-act="save-budget">Lưu trần chi</button></div>
+    <label class="fld">Style lock (tiếng Anh)<textarea id="styleLock" rows="3">${esc(b.style_lock)}</textarea></label>
+    <label class="fld">Danh sách cấm (mỗi dòng 1 mục, vd "no 3D CGI", "no lens flare")<textarea id="negatives" rows="3">${esc((b.negatives || []).join("\n"))}</textarea></label>
+    <label class="fld">Quy tắc âm thanh<textarea id="audioRules" rows="2">${esc(b.audio_rules)}</textarea></label>
+    <div class="row"><button data-act="save-bible">Lưu Bible</button></div>
+    <h2>Nhân vật (roster — tên gọi cố định, dùng khi gắn asset)</h2>
+    <textarea id="charRoster" rows="3" placeholder="Mỗi dòng: Tên | mô tả ngắn">${esc((b.characters || []).map(c => `${c.name} | ${c.desc}`).join("\n"))}</textarea>
+    <h2>Bối cảnh (roster)</h2>
+    <textarea id="locRoster" rows="3" placeholder="Mỗi dòng: Tên | mô tả ngắn">${esc((b.locations || []).map(c => `${c.name} | ${c.desc}`).join("\n"))}</textarea>
+    <div class="row"><button data-act="save-roster">Lưu nhân vật + bối cảnh</button></div>
+  </section>`;
+}
+
+function secReferenceBank() {
+  const ser = activeSeries();
+  if (!ser) return "";
+  const assets = Object.values(S.assets).filter(a => a.series_id === ser.id);
+  return `<section class="card"><h1>2. Reference Bank</h1>
+    <p class="hint">Asset cấp SERIES (không phải cấp sequence) — tải lên 1 lần, dùng lại ở mọi episode/sequence bằng @tên,
+    không tạo node trùng lặp như Giant Studio (76 node ref chỉ có 58 media khác nhau).</p>
+    <div class="tile" style="max-width:320px"><h3>+ Asset mới</h3>
+      <select id="assetKind">${S.asset_kinds.map(k => `<option value="${k}">${esc(k)}</option>`).join("")}</select>
+      <input id="assetName" placeholder="@tên (vd Ashoka)" style="margin-top:4px">
+      <input type="file" id="assetFile" accept="image/*,video/*" style="margin-top:4px">
+      <div class="row"><button data-act="upload-asset">Tải lên</button></div></div>
+    <div class="grid" style="margin-top:10px">${assets.map(assetTile).join("")}</div>
+  </section>`;
+}
+
+function shotRow(sh, seq) {
+  const ser = activeSeries();
+  const assets = Object.values(S.assets).filter(a => a.series_id === ser.id);
+  return `<tr>
+    <td>${sh.order}</td>
+    <td><input type="number" step="0.5" style="width:60px" data-shot-field="start_s" data-id="${sh.id}" value="${sh.start_s}"></td>
+    <td><input type="number" step="0.5" style="width:60px" data-shot-field="end_s" data-id="${sh.id}" value="${sh.end_s}"></td>
+    <td><input type="text" data-shot-field="framing" data-id="${sh.id}" value="${esc(sh.framing)}"></td>
+    <td><input type="text" data-shot-field="camera" data-id="${sh.id}" value="${esc(sh.camera)}"></td>
+    <td><textarea rows="2" data-shot-field="action" data-id="${sh.id}">${esc(sh.action)}</textarea></td>
+    <td><input type="text" data-shot-field="dialogue" data-id="${sh.id}" value="${esc(sh.dialogue)}"></td>
+    <td><input type="text" data-shot-field="sfx" data-id="${sh.id}" value="${esc(sh.sfx)}"></td>
+    <td><select multiple data-shot-field="asset_ids" data-id="${sh.id}">
+      ${assets.map(a => `<option value="${a.id}" ${sh.asset_ids.includes(a.id) ? "selected" : ""}>@${esc(a.name)} (${esc(a.kind)})</option>`).join("")}
+    </select></td>
+    <td><button class="link" data-act="remove-shot" data-id="${sh.id}">Xoá</button></td>
+  </tr>`;
+}
+
+function sequenceBlock(seq) {
+  const shots = Object.values(S.shots).filter(s => s.sequence_id === seq.id).sort((a, b) => a.order - b.order);
+  const rj = jobsFor("render", seq.id), rjl = rj[rj.length - 1];
+  const busy = rjl && ACTIVE.includes(rjl.status);
+  const doneCount = rj.filter(j => j.status === "done").length;
+  const model = S.video_models.find(m => m.id === seq.model_id) || S.video_models[0];
+  return `<div class="seq-block" data-seqid="${seq.id}">
+    <div class="row"><b>Sequence ${seq.order}</b> <span class="chip">${seq.duration_s}s</span> <span class="chip">${esc(seq.aspect)}</span>
+      <span class="chip">${doneCount}/${S.max_renders_per_sequence} lần render</span></div>
+    <div class="row">
+      <label class="fld" style="flex:1 1 80px">Thời lượng (s)<input type="number" data-seq-field="duration_s" data-id="${seq.id}" value="${seq.duration_s}"></label>
+      <label class="fld" style="flex:1 1 140px">Model<select data-seq-field="model_id" data-id="${seq.id}">${S.video_models.map(m => `<option value="${m.id}" ${seq.model_id === m.id ? "selected" : ""}>${esc(m.label)} ($${m.price}/s, tối đa ${m.ref_limit} ref/${m.max_duration}s)</option>`).join("")}</select></label>
+      <label class="fld" style="flex:1 1 80px">Khổ<input type="text" data-seq-field="aspect" data-id="${seq.id}" value="${esc(seq.aspect)}"></label>
+    </div>
+    <label class="fld">Overview<textarea rows="2" data-seq-field="overview" data-id="${seq.id}">${esc(seq.overview)}</textarea></label>
+    <table><thead><tr><th>#</th><th>Bắt đầu</th><th>Kết thúc</th><th>Framing</th><th>Camera</th><th>Hành động</th><th>Thoại</th><th>SFX</th><th>Asset (@tên)</th><th></th></tr></thead>
+      <tbody>${shots.map(sh => shotRow(sh, seq)).join("")}</tbody></table>
+    <div class="row"><button data-act="new-shot" data-id="${seq.id}">+ Shot</button>
+      <button data-act="compile-preview" data-id="${seq.id}">Xem trước prompt + pre-flight</button></div>
+    <div id="preview-${seq.id}"></div>
+    ${rjl && rjl.status === "failed" ? `<div class="err">${esc(rjl.error)}</div>` : ""}
+    ${rjl && rjl.file ? `<video src="/files/${rjl.file}?t=${rjl.id}" controls></video>
+      <div class="row"><span class="chip">${usd(rjl.cost, 3)}</span>
+        ${rjl.verdict === "kept" ? '<span class="chip">✓ đã giữ</span>' :
+          rjl.verdict === "rerolled" ? '<span class="chip">✗ đã bỏ</span>' :
+          `<button data-act="verdict" data-job="${rjl.id}" data-v="kept">Giữ (Kept)</button>
+           <button data-act="verdict" data-job="${rjl.id}" data-v="rerolled">Bỏ (Re-roll)</button>`}
+      </div>` : ""}
+    <div class="row">
+      <button data-act="render" data-id="${seq.id}" data-redo="${doneCount ? 1 : 0}" ${busy || doneCount >= S.max_renders_per_sequence ? "disabled" : ""}>${doneCount ? "Render lại" : "Render"}</button>
+      ${busy ? '<span class="spin"></span>Đang render…' : ""}
+    </div>
+  </div>`;
+}
+
+function episodeBlock(ep) {
+  const seqs = Object.values(S.sequences).filter(s => s.episode_id === ep.id).sort((a, b) => a.order - b.order);
+  return `<div class="ep-block" data-epid="${ep.id}">
+    <h2>Tập ${ep.order} — ${esc(ep.name)} (${esc(ep.code)})</h2>
+    ${seqs.map(sequenceBlock).join("")}
+    <div class="row"><button data-act="new-sequence" data-id="${ep.id}">+ Sequence</button></div>
+  </div>`;
+}
+
+function secEpisodes() {
+  const ser = activeSeries();
+  if (!ser) return "";
+  const eps = Object.values(S.episodes).filter(e => e.series_id === ser.id).sort((a, b) => a.order - b.order);
+  return `<section class="card"><h1>3. Episode → Sequence → Shot</h1>
+    <p class="hint">Nhập shot bằng bảng (chưa dùng LLM tự tách kịch bản — đó là Giai đoạn 3 của brief). Prompt compiler
+    ghép Bible + shot thành 1 prompt Seedance đúng cấu trúc, tự ánh xạ @tên asset sang @ImageN.</p>
+    ${eps.map(episodeBlock).join("")}
+    <div class="row"><input id="newEpCode" placeholder="Mã tập (vd EP10)" style="max-width:160px">
+      <input id="newEpName" placeholder="Tên tập" style="max-width:220px">
+      <button data-act="new-episode">+ Episode mới</button></div>
+  </section>`;
+}
+
+function renderMain() {
+  $("#main").innerHTML = secBible() + secReferenceBank() + secEpisodes();
+}
+
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const d = el.dataset;
+  try {
+    switch (d.act) {
+      case "new-series": { $("#main").innerHTML = newSeriesRow() + $("#main").innerHTML; break; }
+      case "create-series": {
+        const r = await api("/api/series/new", { code: $("#nsCode").value, name: $("#nsName").value, budget_usd: Number($("#nsBudget").value) || 40 });
+        if (r.error) toast(r.error, true); else toast("Đã tạo dự án"); await refresh(); break; }
+      case "save-budget": { const r = await api("/api/series/budget", { id: S.active_series, budget_usd: Number($("#budgetInput").value) }); if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(); break; }
+      case "save-bible": {
+        const negatives = $("#negatives").value.split("\n").map(s => s.trim()).filter(Boolean);
+        const r = await api("/api/series/bible", { id: S.active_series, style_lock: $("#styleLock").value, negatives, audio_rules: $("#audioRules").value });
+        if (r.error) toast(r.error, true); else toast("Đã lưu Bible"); await refresh(); break; }
+      case "save-roster": {
+        const parseRoster = txt => txt.split("\n").map(l => { const [name, ...rest] = l.split("|"); return { name: (name || "").trim(), desc: rest.join("|").trim() }; }).filter(x => x.name);
+        const characters = parseRoster($("#charRoster").value), locations = parseRoster($("#locRoster").value);
+        const r = await api("/api/series/bible", { id: S.active_series, characters, locations });
+        if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(); break; }
+      case "upload-asset": {
+        const file = $("#assetFile").files[0]; if (!file) { toast("Chọn file trước", true); break; }
+        const ext = "." + (file.name.split(".").pop() || "jpg").toLowerCase();
+        const q = new URLSearchParams({ series: S.active_series, kind: $("#assetKind").value, name: $("#assetName").value, ext });
+        const r = await fetch("/api/asset/upload?" + q.toString(), { method: "POST", headers: { "X-Forge-Token": TOKEN }, body: file });
+        const j = await r.json(); if (j.error) toast(j.error, true); else toast("Đã thêm asset"); await refresh(); break; }
+      case "remove-asset": { const r = await api("/api/asset/remove", { id: d.id }); if (r.error) toast(r.error, true); await refresh(); break; }
+      case "new-episode": {
+        const r = await api("/api/episode/new", { series_id: S.active_series, code: $("#newEpCode").value, name: $("#newEpName").value });
+        if (r.error) toast(r.error, true); else toast("Đã thêm tập"); await refresh(); break; }
+      case "new-sequence": { const r = await api("/api/sequence/new", { episode_id: d.id }); if (r.error) toast(r.error, true); await refresh(); break; }
+      case "new-shot": { const r = await api("/api/shot/new", { sequence_id: d.id }); if (r.error) toast(r.error, true); await refresh(); break; }
+      case "remove-shot": { const r = await api("/api/shot/remove", { id: d.id }); if (r.error) toast(r.error, true); await refresh(); break; }
+      case "compile-preview": {
+        const r = await api("/api/compile_preview", { sequence_id: d.id });
+        const el2 = document.getElementById("preview-" + d.id);
+        if (r.error) { el2.innerHTML = `<div class="err">${esc(r.error)}</div>`; break; }
+        el2.innerHTML = (r.errors.length ? `<div class="warn">${r.errors.map(esc).join("<br>")}</div>` : "") +
+          `<details open><summary>Prompt đã biên soạn</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(r.prompt)}</pre></details>`;
+        break; }
+      case "render": {
+        const seqid = d.id, redo = d.redo === "1";
+        const dry = await api("/api/render/run", { sequence_id: seqid, redo, dry: true });
+        if (dry.error) { toast(dry.error, true); break; }
+        const ok = await ask("Xác nhận render?", `<ul>${dry.items.map(x => `<li>${esc(x)}</li>`).join("")}</ul><p><b>Ước tính: ${usd(dry.est, 3)}</b></p>`);
+        if (!ok) break;
+        const r = await api("/api/render/run", { sequence_id: seqid, redo });
+        if (r.error) toast(r.error, true); await refresh(); break; }
+      case "verdict": { const r = await api("/api/render/verdict", { job_id: d.job, verdict: d.v }); if (r.error) toast(r.error, true); await refresh(); break; }
+    }
+  } catch (err) { toast("Lỗi: " + err.message, true); }
+});
+document.addEventListener("change", async e => {
+  const el = e.target, d = el.dataset;
+  try {
+    if (d.seqField) {
+      let v = el.value;
+      if (d.seqField === "duration_s") v = Number(v);
+      await api("/api/sequence/update", { id: d.id, [d.seqField]: v });
+    } else if (d.shotField) {
+      let v = el.value;
+      if (d.shotField === "asset_ids") v = Array.from(el.selectedOptions).map(o => o.value);
+      else if (d.shotField === "start_s" || d.shotField === "end_s") v = Number(v);
+      await api("/api/shot/update", { id: d.id, [d.shotField]: v });
+    } else return;
+  } catch (err) { toast("Lỗi: " + err.message, true); }
+});
+
+refresh();
+setInterval(() => { if (!fatal && !typing) refresh(); }, 2000);
+</script>
+</body>
+</html>
