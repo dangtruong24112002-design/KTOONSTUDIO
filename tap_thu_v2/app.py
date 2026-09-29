@@ -143,6 +143,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.upload(parse_qs(parsed.query), raw))
             if path == "/api/upload_text":
                 return self._send(200, self.upload_text(parse_qs(parsed.query), raw))
+            if path == "/api/knowledge/upload_file":
+                return self._send(200, self.knowledge_upload_file(parse_qs(parsed.query), raw))
             data = json.loads(raw.decode("utf-8") or "{}")
             return self._send(200, self.route(path, data))
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -183,6 +185,23 @@ class Handler(BaseHTTPRequestHandler):
                 return {"error": "purpose không hợp lệ."}
         P.save()
         return {"ok": True, "chars": len(text)}
+
+    def knowledge_upload_file(self, q, raw):
+        def one(k, d=""):
+            return (q.get(k) or [d])[0]
+        filename, kid, type_, name = one("filename", "file.txt"), one("id"), one("type"), one("name")
+        try:
+            text = P.extract_text(raw, filename)
+        except ValueError as e:
+            return {"error": str(e)}
+        try:
+            if kid:
+                v = P.add_knowledge_version(kid, text)
+                return {"ok": True, "id": kid, "v": v}
+            doc = P.new_knowledge_doc(type_, name or filename, text)
+            return {"ok": True, "id": doc["id"], "v": doc["current_v"]}
+        except (ValueError, P.ApiError) as e:
+            return {"error": str(e)}
 
     def route(self, path, d):
         try:
@@ -280,6 +299,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reflib/path":
             r = P.reflib_set_path(str(d.get("path") or ""))
             return {"ok": True, **r}
+        if path == "/api/knowledge/paste":
+            kid = d.get("id")
+            if kid:
+                v = P.add_knowledge_version(kid, str(d.get("text") or ""))
+                return {"ok": True, "id": kid, "v": v}
+            doc = P.new_knowledge_doc(d.get("type"), str(d.get("name") or "").strip(), str(d.get("text") or ""))
+            return {"ok": True, "id": doc["id"], "v": doc["current_v"]}
+        if path == "/api/knowledge/set_version":
+            P.set_knowledge_version(d.get("id"), d.get("v"))
+            return {"ok": True}
+        if path == "/api/knowledge/remove":
+            P.remove_knowledge_doc(d.get("id"))
+            return {"ok": True}
+        if path == "/api/knowledge/condensed":
+            P.set_condensed(d.get("id"), d.get("text"), bool(d.get("approved")))
+            return {"ok": True}
         if path == "/api/approve":
             P.set_approved(d.get("bank"), d.get("id"), bool(d.get("approved")))
             return {"ok": True}

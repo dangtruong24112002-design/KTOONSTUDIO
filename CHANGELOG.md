@@ -45,3 +45,12 @@
   dải nhỏ hiện phiên bản đang chạy, nút "Kiểm tra cập nhật ngay", và trang tự chuyển/tự tải lại khi có bản
   mới (trừ khi đang gõ dở). Test bằng GitHub API giả mới thêm vào mock_providers.py
   (`ktoon_tap_thu/tests_mock/update_check.py`) — cả đường thành công lẫn đường rollback đều pass ổn định.
+- 2026-09-29 Thư viện kiến thức cho `tap_thu_v2` (docs/SPEC_TAP_THU_V2.md §19, yêu cầu #7): mục mới để
+  tải file (.txt/.md/.docx/.xlsx) hoặc dán text, gắn 1 trong 8 loại (shotlist/kịch bản, ảnh nhân vật,
+  char sheet, bối cảnh, prop, storyboard, prompt video, style), lưu trong thư mục dữ liệu, có phiên bản
+  và quay lại bản cũ được. Các bước tách tập/chia batch, tạo ảnh, viết prompt video tự chèn đúng loại
+  tài liệu vào system prompt; ô "Prompt mẫu" cũ vẫn ưu tiên nếu có dán, không thì dùng thư viện. Tài
+  liệu dài hơn ~3.000 từ có nút "Rút gọn thành bộ luật" (LLM việc lặt vặt) — chỉ dùng bản đã duyệt, bản
+  gốc giữ nguyên; hiện số token ước tính mỗi lần gọi. Mỗi ảnh/prompt tạo ra ghi rõ tài liệu + phiên bản
+  đã dùng. Test bằng API giả (`ktoon_tap_thu/tests_mock/knowledge_check.py`, 19 bước) cộng
+  `checks_v2.py` + `e2e_v2.py` + `update_check.py` chạy lại đều pass.

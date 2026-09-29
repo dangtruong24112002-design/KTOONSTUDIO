@@ -144,6 +144,11 @@ async function uploadText(purpose, file) {
   const r = await fetch("/api/upload_text?" + q.toString(), {method: "POST", headers: {"X-Tapthu-Token": TOKEN}, body: file});
   return r.json();
 }
+async function uploadKnowledgeFile(params, file) {
+  const q = new URLSearchParams(Object.assign({filename: file.name}, params));
+  const r = await fetch("/api/knowledge/upload_file?" + q.toString(), {method: "POST", headers: {"X-Tapthu-Token": TOKEN}, body: file});
+  return r.json();
+}
 function toast(msg, bad) {
   const d = document.createElement("div"); d.textContent = msg; if (bad) d.className = "bad";
   $("#toast").appendChild(d); setTimeout(() => d.remove(), bad ? 9000 : 4000);
@@ -236,7 +241,7 @@ function renderHeader() {
     `<div class="meter"><span class="muted">${esc(keys)}</span></div>` +
     `<div class="meter"><span class="muted">${esc(verStr)}</span></div>` +
     `<button data-act="reload-keys">Đọc lại keys.txt</button>`;
-  const jumps = [["#sec-script", "Kịch bản"], ["#sec-list", "Danh sách"], ["#sec-templates", "Prompt mẫu"], ["#sec-reflib", "Kho ref"],
+  const jumps = [["#sec-script", "Kịch bản"], ["#sec-list", "Danh sách"], ["#sec-templates", "Prompt mẫu"], ["#sec-knowledge", "Thư viện kiến thức"], ["#sec-reflib", "Kho ref"],
                  ["#sec-chars", "Nhân vật"], ["#sec-envs", "Bối cảnh"], ["#sec-props", "Prop"], ["#sec-settings", "Cài đặt"]]
     .concat((S.episodes_order || []).map(eid => ["#ep-" + eid, eid])).concat([["#sec-cost", "Chi phí"]]);
   $("#jump").innerHTML = jumps.map(([href, label]) => `<button data-jump="${href}">${esc(label)}</button>`).join("");
@@ -333,6 +338,56 @@ function secTemplates(force) {
     <p class="hint">Dán mẫu prompt của bạn cho từng loại. GPT sẽ viết đúng cấu trúc và văn phong của mẫu, chỉ thay nội dung theo từng nhân vật/bối cảnh/prop/batch; khối style ở mục 2 luôn được chèn vào. Để trống thì GPT tự viết prompt kiểu chung chung.</p>
     ${T.map(([k, label]) => `<div class="stephead">${esc(label)}</div><textarea data-tpl="${k}" rows="3" placeholder="dán mẫu tiếng Anh ở đây (tuỳ chọn)…">${esc(S.templates[k] || "")}</textarea>
       <div class="row"><button data-act="save-template" data-key="${k}">Lưu mẫu ${esc(label)}</button></div>`).join("")}</section>`, force);
+}
+function kbTypeName(t) { return (S.knowledge_type_name && S.knowledge_type_name[t]) || t; }
+function knowledgeDocCard(doc) {
+  const ver = doc.versions.find(v => v.v === doc.current_v) || {};
+  const needsCondense = ver.needs_condense;
+  const hasCondensed = (ver.condensed_text || "").trim().length > 0;
+  const kjs = jobs("condense_knowledge", doc.id), kjl = kjs[kjs.length - 1];
+  return `<div class="tile"><div class="head"><b>${esc(doc.name)}</b>
+      <span class="chip">v${doc.current_v}/${doc.versions.length} · ${doc.active_word_count} từ · ~${doc.active_token_est} token/lần gọi</span></div>
+    <div class="row">
+      <label class="fld" style="flex:1 1 140px">Xem lại phiên bản
+        <select data-act="kb-set-version" data-id="${doc.id}">${doc.versions.map(v => `<option value="${v.v}" ${v.v === doc.current_v ? "selected" : ""}>v${v.v} · ${esc(v.created)} · ${v.word_count} từ</option>`).join("")}</select></label>
+      <button class="link" data-act="kb-remove" data-id="${doc.id}">Xoá tài liệu</button></div>
+    <details><summary>Xem nội dung bản v${doc.current_v}</summary><pre>${esc(ver.text || "")}</pre></details>
+    ${needsCondense ? `<div class="warnbox">Tài liệu dài ${ver.word_count} từ (&gt;${S.condense_word_threshold}) — nên rút gọn để đỡ tốn token mỗi lần gọi.
+      <div class="row">${itemBtn("condense_knowledge", doc.id, "Rút gọn thành bộ luật (GPT)", hasCondensed)}</div>
+      ${kjl && ACTIVE.includes(kjl.status) ? '<span class="spin"></span>Đang rút gọn…' : ""}
+      ${kjl && kjl.status === "failed" ? `<div class="err">${esc(kjl.error)}</div>` : ""}</div>` : ""}
+    ${hasCondensed ? `<div class="stephead">Bản rút gọn (xem/sửa rồi duyệt — duyệt xong mới được dùng khi chạy)</div>
+      <textarea rows="6" data-kb-condensed="${doc.id}">${esc(ver.condensed_text)}</textarea>
+      <div class="row"><button data-act="kb-save-condensed" data-id="${doc.id}">Lưu chỉnh sửa</button>
+        <label class="row" style="width:auto"><input type="checkbox" style="width:auto" data-act="kb-approve-condensed" data-id="${doc.id}" ${ver.condensed_approved ? "checked" : ""}> Đã duyệt — dùng bản này khi chạy</label></div>
+      ${ver.condensed_approved ? '<p class="hint">Đang dùng bản rút gọn (đã duyệt) khi chạy; bản gốc vẫn giữ nguyên, xem lại được ở trên.</p>' : '<p class="hint">Chưa duyệt — vẫn đang dùng bản gốc đầy đủ khi chạy.</p>'}` : ""}
+    <div class="stephead">Thêm phiên bản mới cho tài liệu này</div>
+    <div class="uprow"><label class="fld" style="flex:2 1 160px">Tải file mới (.docx .md .txt .xlsx)<input type="file" class="kb-file" data-id="${doc.id}"></label>
+      <button data-act="kb-upload-version" data-id="${doc.id}">Tải lên</button></div>
+    <textarea rows="3" class="kb-paste-text" data-id="${doc.id}" placeholder="hoặc dán nội dung bản mới ở đây…"></textarea>
+    <div class="row"><button data-act="kb-paste-version" data-id="${doc.id}">Lưu bản dán</button></div></div>`;
+}
+function knowledgeNewRow(type_) {
+  return `<div class="tile"><div class="stephead">+ Tài liệu mới (${esc(kbTypeName(type_))})</div>
+    <input class="kb-new-name" data-type="${type_}" placeholder="tên tài liệu (vd: Mẫu shot list #1)">
+    <div class="uprow"><label class="fld" style="flex:2 1 160px">Tải file (.docx .md .txt .xlsx)<input type="file" class="kb-new-file" data-type="${type_}"></label>
+      <button data-act="kb-upload-new" data-type="${type_}">Tải lên</button></div>
+    <textarea rows="3" class="kb-new-text" data-type="${type_}" placeholder="hoặc dán nội dung ở đây…"></textarea>
+    <div class="row"><button data-act="kb-paste-new" data-type="${type_}">Lưu bản dán</button></div></div>`;
+}
+function secKnowledge(force) {
+  updateSec($("#main"), "knowledge", [S.knowledge, S.settings], () => {
+    const types = S.knowledge_types || [];
+    const byType = {};
+    Object.values(S.knowledge || {}).forEach(d => { (byType[d.type] = byType[d.type] || []).push(d); });
+    return `<section class="card"><h1>Thư viện kiến thức</h1>
+      <p class="hint">Thay cho việc dán prompt mẫu từng lần: tải hoặc dán tài liệu mẫu của bạn (shot list, ảnh nhân vật, char sheet,
+      bối cảnh, prop, storyboard, cấu trúc prompt video, style), gắn đúng loại — mỗi bước sẽ tự chèn đúng tài liệu vào lệnh gửi GPT,
+      bám theo đúng cấu trúc/văn phong bạn đưa. Mỗi tài liệu có nhiều phiên bản, xem lại/quay về bản cũ được.
+      Ô "Prompt mẫu" ở mục 3 vẫn dùng được — có thì ưu tiên hơn thư viện này; không có thì app dùng thư viện.</p></section>
+      ${types.map(t => `<section class="card"><h2>${esc(kbTypeName(t))}</h2>
+        <div class="grid">${(byType[t] || []).map(knowledgeDocCard).join("")}${knowledgeNewRow(t)}</div></section>`).join("")}`;
+  }, force);
 }
 function secReflib(force) {
   const rj = jobs("reflib_scan"), rjl = rj[rj.length - 1];
@@ -776,7 +831,7 @@ function secCost(force) {
 function renderAll(force) {
   if (!S) return;
   renderHeader();
-  secProject(force); secScript(force); secList(force); secTemplates(force); secReflib(force);
+  secProject(force); secScript(force); secList(force); secTemplates(force); secKnowledge(force); secReflib(force);
   secChars(force); secEnvs(force); secProps(force); secVoices(force); secRefs(force);
   secSettings(force);
   secEpisodesAll(force);
@@ -908,6 +963,36 @@ document.addEventListener("click", async e => {
         const r = await api("/api/update/check_now", {});
         if (r.error) toast(r.error, true); else toast("Đang kiểm tra cập nhật…");
         break; }
+      case "kb-remove": {
+        const ok = await ask("Xoá tài liệu này?", "<p class=\"muted\">Xoá cả các phiên bản cũ, không khôi phục được.</p>", "Xoá");
+        if (!ok) break;
+        const r = await api("/api/knowledge/remove", {id: d.id}); if (r.error) toast(r.error, true); await refresh(); break; }
+      case "kb-upload-version": {
+        const input = document.querySelector(`input.kb-file[data-id="${d.id}"]`);
+        const file = input.files[0]; if (!file) { toast("Chọn file trước", true); break; }
+        const r = await uploadKnowledgeFile({id: d.id}, file);
+        if (r.error) toast(r.error, true); else toast("Đã lưu phiên bản mới"); await refresh(); break; }
+      case "kb-paste-version": {
+        const ta = document.querySelector(`textarea.kb-paste-text[data-id="${d.id}"]`);
+        if (!ta.value.trim()) { toast("Chưa dán gì", true); break; }
+        const r = await api("/api/knowledge/paste", {id: d.id, text: ta.value});
+        if (r.error) toast(r.error, true); else { toast("Đã lưu phiên bản mới"); ta.value = ""; } await refresh(); break; }
+      case "kb-upload-new": {
+        const input = document.querySelector(`input.kb-new-file[data-type="${d.type}"]`);
+        const nameEl = document.querySelector(`input.kb-new-name[data-type="${d.type}"]`);
+        const file = input.files[0]; if (!file) { toast("Chọn file trước", true); break; }
+        const r = await uploadKnowledgeFile({type: d.type, name: nameEl.value.trim()}, file);
+        if (r.error) toast(r.error, true); else toast("Đã thêm tài liệu"); await refresh(); break; }
+      case "kb-paste-new": {
+        const ta = document.querySelector(`textarea.kb-new-text[data-type="${d.type}"]`);
+        const nameEl = document.querySelector(`input.kb-new-name[data-type="${d.type}"]`);
+        if (!ta.value.trim()) { toast("Chưa dán gì", true); break; }
+        const r = await api("/api/knowledge/paste", {type: d.type, name: nameEl.value.trim(), text: ta.value});
+        if (r.error) toast(r.error, true); else { toast("Đã thêm tài liệu"); ta.value = ""; nameEl.value = ""; } await refresh(); break; }
+      case "kb-save-condensed": {
+        const ta = document.querySelector(`textarea[data-kb-condensed="${d.id}"]`);
+        const r = await api("/api/knowledge/condensed", {id: d.id, text: ta.value, approved: false});
+        if (r.error) toast(r.error, true); else toast("Đã lưu — chưa duyệt, vẫn dùng bản gốc khi chạy"); await refresh(); break; }
     }
   } catch (err) { if (err.message !== "token") toast("Lỗi: " + err.message, true); }
 });
@@ -929,6 +1014,11 @@ document.addEventListener("change", async e => {
     else if (d.act === "qc") await api("/api/qc", {batch: d.id, [d.f]: el.checked});
     else if (d.act === "qc-note") await api("/api/qc", {batch: d.id, note: el.value});
     else if (d.act === "save-setting") await api("/api/settings", {settings: {[d.key]: el.value}});
+    else if (d.act === "kb-set-version") await api("/api/knowledge/set_version", {id: d.id, v: Number(el.value)});
+    else if (d.act === "kb-approve-condensed") {
+      const ta = document.querySelector(`textarea[data-kb-condensed="${d.id}"]`);
+      await api("/api/knowledge/condensed", {id: d.id, text: ta ? ta.value : undefined, approved: el.checked});
+    }
     else return;
     await refresh();
   } catch (err) { toast("Lỗi: " + err.message, true); }

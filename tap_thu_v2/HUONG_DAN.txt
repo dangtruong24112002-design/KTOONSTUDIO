@@ -47,6 +47,19 @@ BƯỚC 3 — Làm theo đúng thứ tự trên 1 trang (trang dài, cuộn xu�
       ảnh prop, tài liệu cấu trúc viết prompt video, prompt video mẫu. GPT sẽ viết đúng cấu trúc/
       văn phong của mẫu, chỉ thay nội dung; khối style ở mục 2 luôn được chèn thêm vào. Để trống
       thì GPT tự viết theo kiểu chung chung.
+  3b Thư viện kiến thức (thay cho việc dán "Prompt mẫu" ở mục 3 mỗi lần)
+      Mục "Thư viện kiến thức" (xem hàng nút "nhảy nhanh" ở đầu trang): tải file (.txt .md .docx
+      .xlsx) hoặc dán text, gắn 1 trong 8 loại (shotlist/kịch bản, ảnh nhân vật, char sheet, bối
+      cảnh, prop, storyboard, prompt video, style). Mỗi lần chạy các bước tách tập, tạo ảnh, viết
+      prompt video, app tự lấy đúng loại tài liệu phù hợp chèn vào — không cần dán tay như mục 3.
+      Nếu ô "Prompt mẫu" ở mục 3 CÓ dán gì thì nó vẫn được ưu tiên dùng trước; để trống ô đó thì app
+      mới dùng tài liệu trong thư viện. Tải bản mới của cùng 1 loại sẽ ra phiên bản mới (v2, v3…),
+      chọn lại phiên bản cũ được bất cứ lúc nào, không mất bản nào. Tài liệu dài (trên ~3.000 từ) có
+      nút "Rút gọn thành bộ luật" (GPT tự rút gọn) — xem, sửa, bấm "Duyệt" thì mới dùng bản rút gọn
+      (đỡ tốn tiền mỗi lần gọi); chưa duyệt thì app vẫn dùng bản gốc đầy đủ. Mỗi ảnh/prompt tạo ra
+      đều ghi rõ đã dùng tài liệu nào, phiên bản nào (xem trong khung kết quả) — biết chỗ nào cần
+      sửa lại tài liệu nếu kết quả chưa đúng ý.
+
   4 Kho ảnh tham chiếu
       Dán đường dẫn 1 thư mục TRÊN MÁY ĐANG CHẠY APP (không cần tải lên trình duyệt). Trong đó
       tạo 2 thư mục con: AI\ (ảnh AI — dùng được cho mặt) và THAT\ (ảnh người thật — chỉ dùng

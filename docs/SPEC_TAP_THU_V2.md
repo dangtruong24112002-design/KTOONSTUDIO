@@ -529,3 +529,41 @@ test script uses to switch the mock between a good update, a broken one, and "no
 rollback path (verifying the serving process is never interrupted and no orphaned broken process is left
 listening), and that project data survives a real handoff between two live processes. Still never a real
 paid API call.
+
+## 19. Addendum #7 (2026-09-29) — knowledge library (thay cho việc dán prompt mẫu từng lần)
+
+1. A "Thư viện kiến thức" section: upload a file (`.docx`/`.md`/`.txt`/`.xlsx`, via the same stdlib
+   `extract_text()` as §15 A.1) or paste text, tagged with one of 8 types: `shotlist_kich_ban`,
+   `anh_nhan_vat`, `char_sheet`, `boi_canh`, `prop`, `storyboard`, `video_prompt`, `style`. One type can
+   hold several independent documents. Stored under `DATA_DIR/kien_thuc` conceptually (in practice inside
+   `state.json`'s `knowledge.docs`, since these are plain text, not media files) — each document keeps its
+   full version history (`versions: [{v, text, word_count, created, condensed_text, condensed_approved}]`)
+   with a movable `current_v` pointer; the owner can jump back to (or forward to) any past version without
+   losing the others.
+2. Every relevant step auto-injects the matching type's currently-active documents into that LLM call's
+   system prompt: splitting a script into episodes uses `shotlist_kich_ban`; portrait/sheet/environment/
+   prop/storyboard image prompts use their own matching type (`anh_nhan_vat`/`char_sheet`/`boi_canh`/
+   `prop`/`storyboard`) plus `style`; writing a batch's video prompt uses `video_prompt` plus `style`.
+   (Deterministic batch-splitting itself stays free/no-LLM, per §15 B.8 — unaffected.) The LLM is told to
+   match the given document's exact structure and voice. Priority order: the owner's saved "Prompt mẫu"
+   field (§15 A.3) first if set, then the knowledge library's current versions, then a flat fallback field
+   (`style` only) — never both a template and the library for the same slot.
+3. A document whose current version exceeds ~3000 words gets a "Rút gọn thành bộ luật" button (uses the
+   misc LLM, §16 item 3) that produces a condensed rule set attached to that same version
+   (`condensed_text`); the owner reviews/edits it in a textarea and only an explicit "Đã duyệt" checkbox
+   (`condensed_approved`) makes it the text actually sent — before approval (and always for the raw
+   original itself), nothing is altered. Each doc card shows its current version's word count and an
+   estimated token count per call (`len(text)/3.5`, matching the app's own cost-estimate convention).
+4. Every job that used a knowledge-library document (or a template, or a specific choice of neither)
+   records exactly which document id(s) + version(s) — or `{"template": key}` — went into its prompt, in
+   the job's own `knowledge_used` field, so the owner can tell which document to fix if a result is off.
+
+New API routes: `/api/knowledge/upload_file` (raw body, `id` to add a version to an existing doc or
+`type`+`name` to create a new one), `/api/knowledge/paste` (same, JSON), `/api/knowledge/set_version`,
+`/api/knowledge/remove`, `/api/knowledge/condensed` (save an edit and/or set approval).
+
+Tested purely against the mock (`ktoon_tap_thu/tests_mock/knowledge_check.py`): versioning and rollback,
+that a knowledge doc feeds a real job's prompt when no template is set and that a template still wins once
+one is set, that a long document is flagged and condensing measurably shrinks the injected text (checked
+by comparing a `prompt` stage's dry-run price estimate before/after approval), and that removal works.
+`checks_v2.py`/`e2e_v2.py`/`update_check.py` all still pass unchanged.

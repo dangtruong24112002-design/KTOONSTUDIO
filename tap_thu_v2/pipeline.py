@@ -204,12 +204,13 @@ STAGE_NAME = {"split_episodes": "Tách kịch bản thành các tập", "parse_l
               "portrait": "Ảnh nhân vật", "sheet": "Sheet 21:9", "env_wide": "Ảnh bối cảnh",
               "env_rev": "Bối cảnh (góc ngược)", "prop": "Ảnh prop", "voice": "Giọng", "video_ref": "Video ref",
               "storyboard": "Storyboard", "frame": "Cắt khung hình", "fix_img": "Ảnh sửa", "prompt": "Prompt",
-              "review": "Duyệt prompt (Gemini)", "gen": "Sinh video", "patch": "Vá đoạn", "critique": "Nhận xét ảnh"}
-LLM_KINDS = {"split_episodes", "parse_list", "preprod", "reflib_scan", "suggest_components", "prompt", "review", "critique"}
+              "review": "Duyệt prompt (Gemini)", "gen": "Sinh video", "patch": "Vá đoạn", "critique": "Nhận xét ảnh",
+              "condense_knowledge": "Rút gọn tài liệu"}
+LLM_KINDS = {"split_episodes", "parse_list", "preprod", "reflib_scan", "suggest_components", "prompt", "review", "critique", "condense_knowledge"}
 IMAGE_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "fix_img", "storyboard"}
 EDITABLE_IMAGE_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "storyboard"}
 VIDEO_KINDS = {"gen", "patch"}
-SERIES_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "preprod", "parse_list"}
+SERIES_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "preprod", "parse_list", "condense_knowledge"}
 
 PROHIBITED = ("no subtitles, no BGM (unless explicitly requested), no exaggerated movements, no extra dialogue, "
               "no runny nose or premature tears, no AI-feel artifacts, no fast cuts when the shot is one continuous take")
@@ -407,6 +408,7 @@ def fresh_state():
             "templates": {"char_single": "", "char_sheet": "", "env": "", "prop": "",
                           "video_structure": "", "video_example": ""},
             "reflib": {"path": "", "scanned": {}},
+            "knowledge": {"docs": {}},
             "episodes": {}, "episodes_order": [],
             "chars": {}, "envs": {}, "props": {}, "voices": {}, "video_refs": {},
             "chats": {}, "llm_vision_ok": True,
@@ -424,6 +426,7 @@ def load_state():
             st["settings"].setdefault(k, v)
         for k, v in fresh["templates"].items():
             st["templates"].setdefault(k, v)
+        st["knowledge"].setdefault("docs", {})
         return st
     return fresh_state()
 
@@ -728,6 +731,134 @@ def reflib_candidates(exclude_face_real=True):
             continue
         out.append((key, path, info["source"], info["use"], info["label"]))
     return out
+
+
+# ---------------------------------------------------------------- knowledge library (spec §19, yêu cầu #7)
+KNOWLEDGE_TYPES = ["shotlist_kich_ban", "anh_nhan_vat", "char_sheet", "boi_canh", "prop", "storyboard", "video_prompt", "style"]
+KNOWLEDGE_TYPE_NAME = {
+    "shotlist_kich_ban": "Shot list / kịch bản mẫu", "anh_nhan_vat": "Ảnh nhân vật (mẫu)",
+    "char_sheet": "Char sheet (mẫu)", "boi_canh": "Bối cảnh (mẫu)", "prop": "Prop (mẫu)",
+    "storyboard": "Storyboard (mẫu)", "video_prompt": "Cấu trúc prompt video (mẫu)", "style": "Style chung",
+}
+CONDENSE_WORD_THRESHOLD = 3000
+
+CONDENSE_SYS = """You compress a long reference document into a compact rule set for reuse as a system-
+prompt fragment for other LLM calls, preserving every concrete, actionable rule, structure requirement,
+and voice/style cue the original states — drop only redundant prose, repeated examples and filler. Keep
+the same language as the original. Output plain text only, as short bullet points or short numbered
+rules, no preamble, no markdown headers, no meta-commentary about what you did."""
+
+
+def knowledge_dir():
+    d = DATA_DIR / "kien_thuc"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _new_kb_id():
+    n = 1
+    while f"kb_{n}" in STATE["knowledge"]["docs"]:
+        n += 1
+    return f"kb_{n}"
+
+
+def add_knowledge_version(kid, text):
+    doc = STATE["knowledge"]["docs"][kid]
+    v = (doc["versions"][-1]["v"] if doc["versions"] else 0) + 1
+    doc["versions"].append({"v": v, "text": text, "word_count": len(text.split()), "created": ts(),
+                            "condensed_text": "", "condensed_approved": False})
+    doc["current_v"] = v
+    save()
+    return v
+
+
+def new_knowledge_doc(type_, name, text):
+    if type_ not in KNOWLEDGE_TYPES:
+        raise ValueError("Loại tài liệu không hợp lệ: " + str(type_))
+    if not text.strip():
+        raise ValueError("Tài liệu trống.")
+    kid = _new_kb_id()
+    STATE["knowledge"]["docs"][kid] = {"id": kid, "type": type_, "name": name or kid, "versions": [], "current_v": 0}
+    add_knowledge_version(kid, text)
+    return STATE["knowledge"]["docs"][kid]
+
+
+def knowledge_doc(kid):
+    doc = STATE["knowledge"]["docs"].get(kid)
+    if not doc:
+        raise ApiError(f"Không có tài liệu {kid}.")
+    return doc
+
+
+def set_knowledge_version(kid, v):
+    doc = knowledge_doc(kid)
+    if not any(x["v"] == int(v) for x in doc["versions"]):
+        raise ValueError("Không có phiên bản này.")
+    doc["current_v"] = int(v)
+    save()
+
+
+def remove_knowledge_doc(kid):
+    STATE["knowledge"]["docs"].pop(kid, None)
+    save()
+
+
+def _kb_version(doc, v=None):
+    v = v if v is not None else doc["current_v"]
+    return next((x for x in doc["versions"] if x["v"] == v), None)
+
+
+def set_condensed(kid, text, approved):
+    doc = knowledge_doc(kid)
+    ver = _kb_version(doc)
+    if not ver:
+        raise ValueError("Tài liệu chưa có nội dung.")
+    if text is not None:
+        ver["condensed_text"] = text
+    ver["condensed_approved"] = bool(approved)
+    save()
+
+
+def active_kb_text(doc):
+    """The text actually sent to the LLM for this doc's current version: the owner-approved condensed
+    rule set if one exists, else the raw text — the raw original is never altered (spec §19 item 3)."""
+    ver = _kb_version(doc)
+    if not ver:
+        return ""
+    if ver.get("condensed_approved") and ver.get("condensed_text", "").strip():
+        return ver["condensed_text"]
+    return ver["text"]
+
+
+def knowledge_docs_of_type(type_):
+    return [d for d in STATE["knowledge"]["docs"].values() if d["type"] == type_]
+
+
+def knowledge_context(type_):
+    """Combined text for every active doc of one knowledge type, plus the manifest of exactly which
+    doc+version contributed (spec §19 item 4 — every result records what it used)."""
+    parts, used = [], []
+    for d in knowledge_docs_of_type(type_):
+        text = active_kb_text(d)
+        if not text.strip():
+            continue
+        parts.append(f"--- Tài liệu: {d['name']} (loại {KNOWLEDGE_TYPE_NAME.get(type_, type_)}) ---\n{text}")
+        used.append({"id": d["id"], "name": d["name"], "type": type_, "v": d["current_v"]})
+    return "\n\n".join(parts), used
+
+
+def resolve_prompt_source(template_key, knowledge_type, flat_fallback=None):
+    """Priority (spec §19 item 2): the owner's saved 'prompt mẫu' template first, then the knowledge
+    library's current versions, then a flat fallback field (e.g. STATE['style']), else empty."""
+    tmpl = STATE["templates"].get(template_key, "").strip() if template_key else ""
+    if tmpl:
+        return tmpl, [{"template": template_key}]
+    text, used = knowledge_context(knowledge_type) if knowledge_type else ("", [])
+    if text.strip():
+        return text, used
+    if flat_fallback and flat_fallback.strip():
+        return flat_fallback.strip(), []
+    return "", []
 
 
 # ---------------------------------------------------------------- episodes / shots / batches
@@ -1190,19 +1321,21 @@ def chat_rewrite(text):
     return content.strip(), cost
 
 
-def template_prompt(template_key, item_context):
-    """Fill the owner's saved template (spec §15 A.3); with no template, fall back to a clean generic prompt."""
-    tmpl = STATE["templates"].get(template_key, "").strip()
-    style = STATE["style"].strip()
+def template_prompt(template_key, item_context, knowledge_type=None):
+    """Fill the owner's saved template/knowledge-library doc (spec §15 A.3 + §19 item 2 priority order);
+    with neither, fall back to a clean generic prompt. Returns (prompt, cost, knowledge_used manifest)."""
+    tmpl_text, tmpl_used = resolve_prompt_source(template_key, knowledge_type)
+    style_text, style_used = resolve_prompt_source(None, "style", STATE["style"])
     ws = ws_client()
     st = S()
     pin, pout = llm_price("llm_misc", st["llm_misc"])
-    user = f"ITEM INFO:\n{item_context}\n\nSHARED STYLE BLOCK:\n{style or '(none given)'}\n\nTEMPLATE:\n{tmpl or '(none saved — write a clean prompt yourself)'}"
+    user = (f"ITEM INFO:\n{item_context}\n\nSHARED STYLE BLOCK:\n{style_text or '(none given)'}\n\n"
+            f"TEMPLATE:\n{tmpl_text or '(none saved — write a clean prompt yourself)'}")
     content, usage = ws.chat(st["llm_misc"], TEMPLATE_FILL_SYS, user, False)
     pt = usage.get("prompt_tokens") or int((len(TEMPLATE_FILL_SYS) + len(user)) / 3.5)
     ct = usage.get("completion_tokens") or int(len(content) / 3.5)
     cost = round(pt / 1e6 * pin + ct / 1e6 * pout, 5)
-    return content.strip(), cost
+    return content.strip(), cost, tmpl_used + style_used
 
 
 def build_edit_body(job):
@@ -1237,29 +1370,29 @@ def build_body(job):
             raise ApiError(f"{c['name']}: chưa có ảnh thành phần nào.")
         refs = [url_of(cc) for cc in c["components"]]
         item = f"Character name: {c['name']}. Description: {c['desc'] or 'a fictional adult'}. Output: ONE consistent character portrait on a solid white background, photoreal, 3:4, combining the given reference components (hair/eyes/face/body/costume from the matching tagged references). No text, no watermark."
-        prompt, cost = template_prompt("char_single", item)
+        prompt, cost, used = template_prompt("char_single", item, "anh_nhan_vat")
         return {"prompt": prompt, "images": refs, "aspect_ratio": "3:4", "resolution": st["image_resolution"],
-                "output_format": "png"}, prompt, {"components": [cc["id"] for cc in c["components"]], "rewrite_cost": cost}
+                "output_format": "png"}, prompt, {"components": [cc["id"] for cc in c["components"]], "rewrite_cost": cost, "knowledge_used": used}
     if k == "sheet":
         c = STATE["chars"][t]
         pj = pick("portrait", t)
         item = f"Character name: {c['name']}. Build a 21:9 reference sheet on a solid white background from the uploaded character image: the right 70% shows 4 full-body views (front, 3/4, side, back); the left 30% shows 4 face views (front, 3/4 left, 3/4 right, profile). Keep the exact face and outfit. No text, no watermark."
-        prompt, cost = template_prompt("char_sheet", item)
+        prompt, cost, used = template_prompt("char_sheet", item, "char_sheet")
         return {"prompt": prompt, "images": [url_of(pj)], "aspect_ratio": "21:9", "resolution": st["sheet_resolution"],
-                "output_format": "png"}, prompt, {"portrait": pj["id"], "rewrite_cost": cost}
+                "output_format": "png"}, prompt, {"portrait": pj["id"], "rewrite_cost": cost, "knowledge_used": used}
     if k in ("env_wide", "env_rev"):
         e = STATE["envs"][t]
         angle = "an establishing wide shot" if k == "env_wide" else "the reverse camera angle of the same location"
         when = "night" if e.get("time") == "night" else "day"
         item = f"Environment: {e['name']} ({e.get('tag', 'EXT')}, {when}time). Description: {e['text']}. Output: photoreal vertical 9:16 {angle}. No text, no watermark, no people unless described."
-        prompt, cost = template_prompt("env", item)
+        prompt, cost, used = template_prompt("env", item, "boi_canh")
         return {"prompt": prompt, "aspect_ratio": "9:16", "resolution": st["image_resolution"],
-                "output_format": "jpeg"}, prompt, {"rewrite_cost": cost}
+                "output_format": "jpeg"}, prompt, {"rewrite_cost": cost, "knowledge_used": used}
     if k == "prop":
         p = STATE["props"][t]
         item = f"Prop: {p['name']}. Description: {p.get('desc') or ''}. Output: photoreal product-style still, solid white background, studio light. No text, no watermark."
-        prompt, cost = template_prompt("prop", item)
-        return {"prompt": prompt, "aspect_ratio": "1:1", "resolution": st["image_resolution"], "output_format": "jpeg"}, prompt, {"rewrite_cost": cost}
+        prompt, cost, used = template_prompt("prop", item, "prop")
+        return {"prompt": prompt, "aspect_ratio": "1:1", "resolution": st["image_resolution"], "output_format": "jpeg"}, prompt, {"rewrite_cost": cost, "knowledge_used": used}
     if k == "storyboard":
         sh = shot_by_id(t)
         refs = []
@@ -1272,11 +1405,13 @@ def build_body(job):
         ej = env and pick("env_wide", env["id"])
         if ej:
             refs.append(url_of(ej))
-        prompt = (f"Photoreal vertical 9:16 film still, storyboard frame for shot {sh['id']}: {sh['desc']}. "
-                  "Keep the exact face and identity of each character from their sheet reference; use the "
-                  "environment reference for the location's look. No text, no watermark.")
+        item = (f"Shot {sh['id']}: {sh['desc']}. Cast: {', '.join(sh['cast']) or 'none'}. Location: {sh['location']}. "
+                "Output: ONE photoreal vertical 9:16 storyboard frame. Keep the exact face and identity of each "
+                "character from their sheet reference; use the environment reference for the location's look. "
+                "No text, no watermark.")
+        prompt, cost, used = template_prompt(None, item, "storyboard")
         return {"prompt": prompt, "images": refs, "aspect_ratio": "9:16", "resolution": st["image_resolution"],
-                "output_format": "jpeg"}, prompt, {}
+                "output_format": "jpeg"}, prompt, {"rewrite_cost": cost, "knowledge_used": used}
     if k == "fix_img":
         f = _find_fix(t)
         frame = pick("frame", t)
@@ -1332,7 +1467,8 @@ def specs_for(stage, target=None, redo=False):
         if not STATE["script_raw"].strip():
             return [], "Chưa có kịch bản/shot list."
         pin, pout = llm_price("llm_misc", st["llm_misc"])
-        est = llm_est(pin, pout, len(SPLIT_EPISODES_SYS) + len(STATE["script_raw"]), 4000)
+        kb_len = len(knowledge_context("shotlist_kich_ban")[0])
+        est = llm_est(pin, pout, len(SPLIT_EPISODES_SYS) + len(STATE["script_raw"]) + kb_len, 4000)
         return [dict(kind="split_episodes", target="ep", provider="wavespeed", model=st["llm_misc"], units=1,
                      unit_price=round(est, 4), label="Tách kịch bản thành các tập")], None
     if stage == "parse_list":
@@ -1466,7 +1602,7 @@ def specs_for(stage, target=None, redo=False):
                         return [], f"{sh['id']}: thiếu sheet nhân vật {', '.join(missing)}."
                     continue
                 model = st["storyboard_model"]
-                price = image_price(model, resolution=st["image_resolution"], quality=st.get("gpt_image2_quality"))
+                price = image_price(model, resolution=st["image_resolution"], quality=st.get("gpt_image2_quality")) + TEMPLATE_EST
                 out.append(dict(kind="storyboard", target=sh["id"], provider="wavespeed", model=model, units=1,
                                  unit_price=round(price, 4), label=f"Storyboard {sh['id']}"))
         return out, None
@@ -1480,6 +1616,17 @@ def specs_for(stage, target=None, redo=False):
         est = llm_est(pin, pout, len(CRITIQUE_SYS), 300)
         return [dict(kind="critique", target=target, provider="wavespeed", model=st["llm_review"], units=1,
                      unit_price=round(est, 4), label=f"Nhận xét ảnh {target}")], None
+    if stage == "condense_knowledge":
+        doc = STATE["knowledge"]["docs"].get(target)
+        if not doc:
+            return [], "Không có tài liệu này."
+        ver = _kb_version(doc)
+        if not ver or not ver["text"].strip():
+            return [], "Tài liệu chưa có nội dung."
+        pin, pout = llm_price("llm_misc", st["llm_misc"])
+        est = llm_est(pin, pout, len(CONDENSE_SYS) + len(ver["text"]), min(2500, ver["word_count"] * 2))
+        return [dict(kind="condense_knowledge", target=target, provider="wavespeed", model=st["llm_misc"], units=1,
+                     unit_price=round(est, 4), label=f"Rút gọn {doc['name']}")], None
     if stage in ("prompt", "review"):
         out = []
         for ep in STATE["episodes"].values():
@@ -1497,7 +1644,13 @@ def specs_for(stage, target=None, redo=False):
                 category = "llm_write" if stage == "prompt" else "llm_review"
                 model = st[category]
                 price_in, price_out = llm_price(category, model)
-                est = llm_est(price_in, price_out, 1800, 900)
+                extra_chars = 0
+                if stage == "prompt":
+                    tmpl_struct = STATE["templates"].get("video_structure", "").strip()
+                    kb_text = tmpl_struct or knowledge_context("video_prompt")[0]
+                    style_text = resolve_prompt_source(None, "style", STATE["style"])[0]
+                    extra_chars = len(kb_text) + len(style_text)
+                est = llm_est(price_in, price_out, 1800 + extra_chars, 900)
                 out.append(dict(kind=stage, target=b["id"], provider="wavespeed", model=model, units=1, unit_price=round(est, 4),
                                  label=(STAGE_NAME[stage]) + " " + b["id"]))
         return out, None
@@ -1680,7 +1833,11 @@ def run_llm(jid):
     images = None
     reasoning = None
     if job["kind"] == "split_episodes":
-        system, user = SPLIT_EPISODES_SYS, "Script/shot list:\n\n" + STATE["script_raw"] + "\n\nReturn the JSON object now."
+        kb_text, kb_used = knowledge_context("shotlist_kich_ban")
+        system = SPLIT_EPISODES_SYS + (("\n\nThe owner's own shot-list style guide/examples — match this "
+            "structure and voice for any shot you write yourself:\n" + kb_text) if kb_text.strip() else "")
+        job["knowledge_used"] = kb_used
+        user = "Script/shot list:\n\n" + STATE["script_raw"] + "\n\nReturn the JSON object now."
         model, jm = st["llm_misc"], True
         pin, pout = llm_price("llm_misc", model)
     elif job["kind"] == "parse_list":
@@ -1709,16 +1866,36 @@ def run_llm(jid):
         system, user = CRITIQUE_SYS, "Critique this reference image."
         model, jm = st["llm_review"], False
         pin, pout = llm_price("llm_review", model)
+    elif job["kind"] == "condense_knowledge":
+        doc = STATE["knowledge"]["docs"][job["target"]]
+        ver = _kb_version(doc)
+        system, user = CONDENSE_SYS, f"Document to compress:\n\n{ver['text']}"
+        model, jm = st["llm_misc"], False
+        pin, pout = llm_price("llm_misc", model)
     elif job["kind"] == "prompt":
         bid = job["target"]
         ep, b = batch_by_id(bid)
         mapping = build_mapping(bid)
         tmpl_struct = STATE["templates"].get("video_structure", "").strip()
         tmpl_example = STATE["templates"].get("video_example", "").strip()
-        system = (tmpl_struct + ("\n\nExample:\n" + tmpl_example if tmpl_example else "") +
-                  "\n\nFollow this structure and voice exactly; change only the scene-specific content. "
-                  "Cite the exact @Image/@Audio/@Video numbers given to you, never invent one. Always end with: "
-                  "Prohibited: " + PROHIBITED + ".") if tmpl_struct else PROMPT_SYS_DEFAULT
+        kb_used = []
+        if tmpl_struct:
+            kb_used.append({"template": "video_structure"})
+            if tmpl_example:
+                kb_used.append({"template": "video_example"})
+            system = (tmpl_struct + ("\n\nExample:\n" + tmpl_example if tmpl_example else "") +
+                      "\n\nFollow this structure and voice exactly; change only the scene-specific content. "
+                      "Cite the exact @Image/@Audio/@Video numbers given to you, never invent one. Always end with: "
+                      "Prohibited: " + PROHIBITED + ".")
+        else:
+            kb_text, kb_used = knowledge_context("video_prompt")
+            system = (kb_text + "\n\nFollow this structure and voice exactly; change only the scene-specific "
+                      "content. Cite the exact @Image/@Audio/@Video numbers given to you, never invent one. "
+                      "Always end with: Prohibited: " + PROHIBITED + ".") if kb_text.strip() else PROMPT_SYS_DEFAULT
+        style_text, style_used = resolve_prompt_source(None, "style", STATE["style"])
+        if style_text.strip():
+            system += "\n\nSHARED STYLE BLOCK (always reflect this): " + style_text
+        job["knowledge_used"] = kb_used + style_used
         user = (f"Batch tier: {b['tier']}. Location: {mapping['ctx']['location']}. Duration: {b['duration']}s.\n"
                 f"Reference mapping (use these numbers only):\n{mapping['text']}\n\n"
                 f"Beats: {json.dumps(mapping['ctx']['beats'], ensure_ascii=False)}\n"
@@ -1771,6 +1948,13 @@ def run_llm(jid):
             elif job["kind"] == "critique":
                 chat_key = job["target"]
                 STATE["chats"].setdefault(chat_key, []).append({"role": "critique", "text": content, "job": jid, "t": ts()})
+            elif job["kind"] == "condense_knowledge":
+                doc = STATE["knowledge"]["docs"].get(job["target"])
+                if doc:
+                    ver = _kb_version(doc)
+                    if ver:
+                        ver["condensed_text"] = content.strip()
+                        ver["condensed_approved"] = False
         except Exception as e:
             job["status"] = "failed"
             job["error"] = f"Kết quả không đúng định dạng ({e}). Bấm tạo lại."
@@ -2140,6 +2324,21 @@ def cost_summary():
             "contract_vnd": CONTRACT_VND, "cap_usd": budget()}
 
 
+def public_knowledge():
+    out = {}
+    for kid, doc in STATE["knowledge"]["docs"].items():
+        ver = _kb_version(doc)
+        active = active_kb_text(doc) if ver else ""
+        out[kid] = {"id": kid, "type": doc["type"], "name": doc["name"], "current_v": doc["current_v"],
+                    "versions": [{"v": x["v"], "created": x["created"], "word_count": x["word_count"],
+                                 "text": x["text"], "condensed_text": x["condensed_text"],
+                                 "condensed_approved": x["condensed_approved"],
+                                 "needs_condense": x["word_count"] > CONDENSE_WORD_THRESHOLD}
+                                for x in doc["versions"]],
+                    "active_word_count": len(active.split()), "active_token_est": round(len(active) / 3.5)}
+    return out
+
+
 def mapping_preview(bid):
     try:
         m = build_mapping(bid)
@@ -2153,7 +2352,7 @@ def public_state():
         jobs = [{k: j.get(k) for k in ("id", "kind", "target", "take", "status", "model", "est", "cost", "error",
                                         "file", "url", "last_frame", "created", "label", "tokens", "units",
                                         "unit_price", "prompt", "dl_error", "result", "provider", "measure", "measured",
-                                        "dur", "edit", "resolution")}
+                                        "dur", "edit", "resolution", "knowledge_used")}
                 for j in sorted(STATE["jobs"].values(), key=lambda j: j["n"])]
         todo = {}
         for stage in ("split_episodes", "parse_list", "preprod", "reflib_scan", "portrait", "sheet", "env_wide", "env_rev", "prop", "prompt", "review", "gen"):
@@ -2189,4 +2388,6 @@ def public_state():
                 "balance": STATE["balance"], "cost": cost_summary(), "component_uses": COMPONENT_USES,
                 "ffmpeg": bool(shutil.which("ffmpeg")), "tier_name": TIER_NAME,
                 "running": len(RUNNING), "stage_names": STAGE_NAME,
-                "series_kinds": sorted(SERIES_KINDS), "mapping": mapping, "model_catalog": full_model_catalog()}
+                "series_kinds": sorted(SERIES_KINDS), "mapping": mapping, "model_catalog": full_model_catalog(),
+                "knowledge": public_knowledge(), "knowledge_types": KNOWLEDGE_TYPES, "knowledge_type_name": KNOWLEDGE_TYPE_NAME,
+                "condense_word_threshold": CONDENSE_WORD_THRESHOLD}

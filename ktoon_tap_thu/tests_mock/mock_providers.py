@@ -77,6 +77,8 @@ REWRITE_TEXT = ("Keep the exact identity, face, aspect ratio and background unch
                 "color to navy blue as requested, nothing else.")
 CRITIQUE_TEXT = ("- Missing the back view on the sheet's right panel.\n- Background reads slightly off-white, "
                  "not pure white.\n- Otherwise consistent identity and usable.")
+CONDENSED_TEXT = ("- Always shoot vertical 9:16, photoreal, cinematic color grade.\n- Never invent a reference "
+                  "number; cite only the ones given.\n- Keep every prohibited-items line verbatim.")
 
 
 def prompt_text_v2(target):
@@ -206,6 +208,8 @@ class H(BaseHTTPRequestHandler):
                 content = REWRITE_TEXT
             elif "concrete problems only" in sysmsg:
                 content = CRITIQUE_TEXT
+            elif "compress a long reference document" in sysmsg:
+                content = CONDENSED_TEXT
             else:
                 content = plan_json()
             with LOCK:
