@@ -353,3 +353,84 @@ sheet, environment (wide/reverse), prop, and storyboard.
    (open item in §12), this button is hidden rather than shown broken.
 7. Chat history and per-message cost are kept per image. A setting (default 10, editable in Cài đặt) caps
    how many edits one image can go through; image-edit spend still counts against the shared budget cap.
+
+## 15. Addendum #3 (2026-09-29) — series-level input, ref library, batches (supersedes conflicts)
+Locked with the owner on 2026-09-29: the tool's flow did not match how the owner actually works. This
+section **takes priority over §1-§14 wherever they conflict** (in particular: it replaces the fixed
+S1/S2a/S2b/S3 structure from §4.2/§13 with flexible per-episode batches, and replaces the "GPT proposes
+the pre-production list from the script" default in §13.2 with "the owner supplies a list file that gets
+parsed"). Money and safety rules are unchanged: $18/episode cap (owner may raise it for a first test),
+max 2 full generations per batch, the first use of each video model still measures its real price, real
+faces are still never allowed from a `THAT\` (real-photo) source, keys still load only from `keys.txt`.
+
+### A. Input (series-level: shared across every episode, saved, hand-editable)
+1. **Script + shot list.** Upload a file (`.txt .md .docx .xlsx .csv`; read `.docx`/`.xlsx` with the
+   standard library only — both are zip archives of XML, so `zipfile` + `xml.etree.ElementTree` read them
+   without extra dependencies; a `.pdf` is not parsed — the owner pastes its text instead) or paste text
+   directly. The app splits the input into episodes (EP01, EP02, ...). Each episode keeps the owner's own
+   shot list exactly: shot count, description, dialogue, and duration where given — the app (or GPT, only
+   when asked to merely reformat pasted/uploaded text into the app's shot schema) never invents or drops a
+   shot.
+2. **Character / environment / prop / style list file.** Upload or paste. The app splits it into
+   individual characters, environments, props, and one shared style block (e.g. "ultra realistic 8K
+   Hollywood film..."), shown as an editable table for the owner to fix before anything is approved.
+3. **Prompt templates**, one set for the whole series, saved and reused for every episode:
+   - single white-background character portrait,
+   - character sheet 21:9,
+   - environment image, prop image (optional),
+   - a video-prompt structure document, plus one example video prompt.
+   Whenever the app asks GPT to write an actual prompt (a character/environment/prop image, or a batch's
+   video prompt), GPT must follow the matching template's structure and voice exactly and change only the
+   scene-specific content; the shared style block is always appended.
+4. **Reference library.** The owner pastes a local folder path (this app runs on the owner's own machine,
+   so the app reads it directly — no browser upload needed). Convention inside that folder:
+   - `AI\` — AI-generated images, the only source ever allowed for a face,
+   - `THAT\` — real-person photos, usable only for costume, hair, body or pose — **never** face or eyes.
+   The app scans the folder once, and for each image not seen before (tracked by path + modified time, so
+   an unchanged image is never rescanned) asks a cheap vision-capable model for a short description and a
+   `use` tag, then caches the result. If the LLM cannot accept images, the app falls back to labeling from
+   the file and folder name. When generating a character, GPT proposes up to about 6 matching component
+   images from this tagged library based on the character's description; the owner reviews, swaps, or
+   removes any of them by hand before the paid generation runs. The `real`+`face`/`eyes` hard rule applies
+   here exactly as it does to a manually uploaded component (§4 item 1): a `THAT\` image can never be
+   selected, suggested, or accepted for `face`/`eyes`.
+
+### B. One-click actions (each shows a price estimate and needs one confirmation; every result stays
+editable by hand, through the per-image chat, or by redoing it)
+5. **[Tạo ảnh đơn tất cả nhân vật]** — per character: the single-portrait template + the shared style
+   block + that character's chosen component images → one white-background portrait. The owner approves
+   each one (same approve/pick mechanism as today).
+6. **[Tạo char sheet cho nhân vật đã duyệt]** — from each approved portrait + the sheet template.
+7. **[Tạo ảnh bối cảnh + prop]** — per environment/prop + the shared style block; a reverse angle stays
+   optional per environment.
+8. **[Chia batch cho tập]** — a deterministic, free (no LLM call) grouping: consecutive shots that share a
+   location/sequence are grouped into one generation batch. A batch's length is the sum of its shots'
+   durations, capped at 30s (Seedance 2.5) or 15s (Seedance 2.0); a batch never ends mid-line of dialogue.
+   The first batch (hook) and the last batch (cliffhanger) default to 2.5; every batch in between defaults
+   to 2.0 unless the owner marks it "key" (then it may use 2.5). The owner can merge two adjacent batches,
+   split a batch at a shot boundary, and change any batch's model, same as today's per-sequence model
+   switch (§4 item 2).
+9. **[Viết prompt tất cả batch]** — for every batch, combine its shots with the matching reference images:
+   the sheet of every character appearing in the batch, its environment, its props, character voices, any
+   video ref, that batch's storyboard image(s) if made (§13 item 4, unchanged), and the previous batch's
+   last frame when it is not the episode's first batch (generalizing the old S2a→S2b rule in §4 item 2 to
+   every batch boundary in the episode). GPT writes the prompt following the video-prompt structure
+   document and example template from §15 item 3; the app still builds and numbers the @Image/@Audio/
+   @Video mapping itself (GPT never guesses a number, §7); Gemini still reviews (§5 item 4); the owner
+   still approves or edits.
+10. **[Gen video hàng loạt]** — submits every approved batch of one episode in one confirmation; a batch
+    that needs the previous batch's last frame waits for it automatically. Unchanged from §4 item 3 and
+    §9: the first use of each model still measures its real price from the Atlas balance, the $18/episode
+    cap still applies, and each batch still gets at most 2 full generations before only the Sửa đoạn hỏng
+    patch workflow (§5 item 6, unchanged) can touch it.
+
+### C. Screen
+One continuous page, in exactly the order A then B above: the series-level inputs and one-click actions
+first, the list of episodes below (each episode expands to its own shot list, batches, prompts, Gen & QC,
+Sửa đoạn hỏng and export — §5 items 5-8, unchanged in substance, just scoped per episode and per batch
+instead of per fixed S1/S2a/S2b/S3). Plain, non-technical wording throughout, as everywhere else in this
+app.
+
+### Testing (still mocks only)
+Exercise this with: one sample two-episode script+shot-list file, one sample character/environment/prop/
+style list file, and one fake reference library folder containing an `AI\` and a `THAT\` subfolder.
