@@ -118,8 +118,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, P.public_state())
             if path.startswith("/files/"):
                 rel = path[len("/files/"):]
-                target = (HERE / rel).resolve()
-                if HERE.resolve() not in target.parents or not target.is_file():
+                target = (P.DATA_DIR / rel).resolve()
+                if P.DATA_DIR.resolve() not in target.parents or not target.is_file():
                     return self._send(404, {"error": "không có file"})
                 return self._file(target)
             return self._send(404, {"error": "không có"})
@@ -219,6 +219,21 @@ class Handler(BaseHTTPRequestHandler):
             KEYS.update(P.load_keys())
             threading.Thread(target=P.refresh_balances, daemon=True).start()
             return {"ok": True, "keys": {p: bool(KEYS.get(k)) for p, k in P.KEY_OF.items()}, "budget": P.budget()}
+        if path == "/api/keys/save":
+            updates = {}
+            if "wavespeed" in d and str(d["wavespeed"]).strip():
+                updates[P.KEY_OF["wavespeed"]] = str(d["wavespeed"]).strip()
+            if "atlas" in d and str(d["atlas"]).strip():
+                updates[P.KEY_OF["atlas"]] = str(d["atlas"]).strip()
+            if "data_dir" in d and str(d["data_dir"]).strip():
+                updates["DATA_DIR"] = str(d["data_dir"]).strip()
+            if not updates:
+                return {"error": "Chưa nhập gì để lưu."}
+            P.save_home_keys(updates)
+            KEYS.clear()
+            KEYS.update(P.load_keys())
+            threading.Thread(target=P.refresh_balances, daemon=True).start()
+            return {"ok": True, "note": "DATA_DIR" in updates and "Đổi thư mục dữ liệu cần khởi động lại app để áp dụng." or ""}
         if path == "/api/balance":
             P.refresh_balances(reset_start=bool(d.get("reset_start")))
             return {"ok": True}
@@ -405,8 +420,10 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
-    OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "media").mkdir(exist_ok=True)
+    P.PROJECTS.mkdir(parents=True, exist_ok=True)
+    P.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     P.ensure_keys_file()
     KEYS.update(P.load_keys())
     STATE.update(P.load_state())

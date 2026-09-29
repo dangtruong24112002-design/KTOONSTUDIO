@@ -662,13 +662,28 @@ function imgSelect(key, current) {
     ${opts.map(m => `<option value="${esc(m.id)}" ${m.id === current ? "selected" : ""}>${esc(imgOptLabel(m))}</option>`).join("")}</select>`;
 }
 function secSettings(force) {
-  updateSec($("#main"), "settings", [S.settings, S.model_catalog], () => {
+  updateSec($("#main"), "settings", [S.settings, S.model_catalog, S.key_preview, S.keys, S.data_dir], () => {
     const st = S.settings;
     const writeModel = ((S.model_catalog && S.model_catalog.llm_write) || []).find(m => m.id === st.llm_write);
     const showThinking = writeModel && writeModel.thinking;
     const gpt2 = ((S.model_catalog && S.model_catalog.image) || []).find(m => m.id === "openai/gpt-image-2/edit");
+    const kp = S.key_preview || {};
     return `<section class="card"><h1>Cài đặt</h1>
-      <p class="hint">Chọn model cho từng việc — giá hiện ngay cạnh tên. Lưu theo series (dùng chung cho mọi tập). Giá lấy từ bảng owner cho biết 29/9 —
+      <div class="stephead">Key API</div>
+      <p class="hint">Dán key mới rồi bấm Lưu — key được lưu vào 1 file trong thư mục nhà trên máy (không phải trong thư mục cài app), nên cập nhật
+      app sau này không mất key. Ô chỉ hiện vài ký tự cuối, không bao giờ hiện lại đầy đủ.</p>
+      <div class="row"><label style="flex:1 1 220px">WaveSpeed ${kp.wavespeed ? `<span class="chip">hiện tại: ${esc(kp.wavespeed)}</span>` : '<span class="muted">chưa có key</span>'}
+        <input type="password" id="keyWavespeed" placeholder="dán key WaveSpeed mới…" autocomplete="off"></label>
+      <label style="flex:1 1 220px">Atlas Cloud ${kp.atlas ? `<span class="chip">hiện tại: ${esc(kp.atlas)}</span>` : '<span class="muted">chưa có key</span>'}
+        <input type="password" id="keyAtlas" placeholder="dán key Atlas Cloud mới…" autocomplete="off"></label></div>
+      <div class="row"><button class="primary" data-act="save-keys">Lưu key</button></div>
+      <div class="stephead">Thư mục dữ liệu dự án (ảnh, video, state, so_chi.csv)</div>
+      <p class="hint">Hiện đang lưu ở: <code>${esc(S.data_dir || "")}</code>. Đổi đường dẫn rồi Lưu — cần khởi động lại app (đóng cửa sổ đen, mở lại) để áp dụng.
+      Để dữ liệu ngoài thư mục cài app, cập nhật code sau này sẽ không đụng tới ảnh/video/chi phí đã có.</p>
+      <div class="row"><input id="dataDirInput" placeholder="vd: C:\\Users\\ten\\KTOON_DATA" style="flex:2 1 260px">
+        <button data-act="save-keys" data-datadir="1">Lưu thư mục dữ liệu</button></div>
+      <div class="stephead">Chọn model cho từng việc — giá hiện ngay cạnh tên</div>
+      <p class="hint">Lưu theo series (dùng chung cho mọi tập). Giá lấy từ bảng owner cho biết 29/9 —
       sandbox chạy phiên này không vào được wavespeed.ai để tự kiểm tra lại, nên vẫn cần owner xác nhận lại ở lần chạy key thật đầu tiên.</p>
       <div class="stephead">LLM viết prompt video</div>
       <div class="row">${llmSelect("llm_write", st.llm_write)}
@@ -832,6 +847,16 @@ document.addEventListener("click", async e => {
       case "save-model-prices": { let mp; try { mp = JSON.parse($("#modelPricesJson").value); } catch (err) { toast("JSON lỗi: " + err.message, true); break; }
         const r = await api("/api/settings", {settings: {model_prices: mp}}); delete dirty.settings;
         if (r.error) toast(r.error, true); else toast("Đã lưu giá model"); await refresh(); break; }
+      case "save-keys": {
+        const body = d.datadir ? {data_dir: $("#dataDirInput").value} : {wavespeed: $("#keyWavespeed").value, atlas: $("#keyAtlas").value};
+        if (!d.datadir && !body.wavespeed && !body.atlas) { toast("Chưa dán key nào", true); break; }
+        if (d.datadir && !body.data_dir.trim()) { toast("Chưa nhập đường dẫn", true); break; }
+        const r = await api("/api/keys/save", body);
+        delete dirty.settings;
+        if ($("#keyWavespeed")) $("#keyWavespeed").value = "";
+        if ($("#keyAtlas")) $("#keyAtlas").value = "";
+        if (r.error) toast(r.error, true); else toast(r.note || "Đã lưu");
+        await refresh(); break; }
     }
   } catch (err) { if (err.message !== "token") toast("Lỗi: " + err.message, true); }
 });

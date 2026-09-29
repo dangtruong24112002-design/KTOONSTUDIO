@@ -471,3 +471,23 @@ Model ids/prices above are as the owner read them off WaveSpeed's own pricing pa
 cloud sandbox this was built in cannot reach `wavespeed.ai`/`api.wavespeed.ai` (network policy), so this
 work could not independently re-verify them against WaveSpeed's live catalog — confirm again on the first
 real-key run (§12).
+
+## 17. Addendum #5 (2026-09-29) — keys and project data live outside the code folder
+
+1. **Key loading order**: `tap_thu_v2\keys.txt` wins per-key when it has a value; the home-dir file
+   (`Path.home() / ".ktoon" / "keys.txt"`, e.g. `C:\Users\<tên>\.ktoon\keys.txt`) fills in anything the
+   local file doesn't have; `.env` is a last-ditch legacy fallback. A "Cài đặt" panel has 2 password-style
+   fields (WaveSpeed, Atlas) + a "Lưu key" button: it writes to the home-dir file, and also mirrors into
+   the local `tap_thu_v2\keys.txt` if that file exists (so the save is never silently shadowed by an
+   existing local file's own value, given the read priority above). The field only ever displays the
+   saved key as `****<last 4 chars>` — never the full value — and the key is never written to `state.json`
+   or any log line.
+2. **Project data folder**: images, video, `state.json`, `so_chi.csv`, `nhat_ky.txt`, `export/` all live
+   under one `DATA_DIR`, default `C:\Users\<tên>\KTOON_DATA`, separate from the `tap_thu_v2` code folder —
+   so replacing the code (by hand, or by the self-updater in §18) never touches project data. `DATA_DIR`
+   is itself set via `DATA_DIR=` in either keys file (same priority as item 1 above); the owner changes it
+   from a field in Cài đặt, which needs an app restart to take effect (it is resolved once at startup,
+   before `state.json` can even be located).
+3. **Workflow going forward**: commits push straight to `main`, no PR — only after the mock-API test suite
+   (`checks_v2.py` + `e2e_v2.py`) passes on a fresh run. Each push adds one Vietnamese line to
+   `CHANGELOG.md` describing what changed.

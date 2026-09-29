@@ -5,16 +5,24 @@ Cần: Python 3 (Windows: cài từ python.org, tick "Add python.exe to PATH")
      Tài khoản WaveSpeed (ảnh + LLM) và Atlas Cloud (video) đã nạp tiền.
 
 BƯỚC 1 — Dán key
-  Mở keys.txt (cùng thư mục với app; nếu chưa có, app tự tạo file trống khi mở lần đầu).
-  Dán key WaveSpeed và Atlas vào sau dấu =, sửa BUDGET_USD nếu muốn (mặc định $18; lần thử đầu
-  tiên có thể tăng lên ~$30 vì còn tốn tiền làm ảnh tham chiếu và đo giá thật). Lưu lại.
-  Không dán key vào chat, không chụp màn hình file này.
+  Cách dễ nhất: mở app (bước 2), vào mục "Cài đặt" ở cuối trang, dán key WaveSpeed và Atlas vào 2 ô,
+  bấm "Lưu key". Key được lưu vào 1 file trong thư mục nhà trên máy (không phải trong thư mục cài
+  app) — cập nhật app sau này không mất key. Ô chỉ hiện vài ký tự cuối, không bao giờ hiện lại đầy đủ.
+  Cách cũ vẫn dùng được: mở tap_thu_v2\keys.txt (nếu chưa có, app tự tạo file trống khi mở lần đầu —
+  giờ nằm ở thư mục nhà, vd C:\Users\<tên>\.ktoon\keys.txt, nhưng nếu bạn đã có sẵn keys.txt cạnh app
+  từ trước thì vẫn dùng được, không cần chuyển gì cả). Dán key WaveSpeed và Atlas vào sau dấu =, sửa
+  BUDGET_USD nếu muốn (mặc định $18; lần thử đầu tiên có thể tăng lên ~$30 vì còn tốn tiền làm ảnh
+  tham chiếu và đo giá thật). Lưu lại.
+  Không dán key vào chat, không chụp màn hình file keys.txt hay ô Cài đặt lúc đang gõ key.
 
 BƯỚC 2 — Mở app
   Windows: bấm đúp chay_windows.bat
   Mac:     chuột phải chay_mac.command > Open
   Trình duyệt tự mở trang http://127.0.0.1:8890 (hoặc cổng gần đó nếu đang bận).
   Giữ cửa sổ đen mở trong lúc dùng. Đóng nó là tắt app; việc đang gửi sẽ tiếp tục khi mở lại.
+  Ảnh/video/state/chi phí lưu ở thư mục dữ liệu riêng (mặc định C:\Users\<tên>\KTOON_DATA, xem/đổi
+  trong Cài đặt — đổi xong cần khởi động lại app), tách khỏi thư mục cài app để cập nhật app sau này
+  không đụng tới dữ liệu đã có.
 
 BƯỚC 3 — Làm theo đúng thứ tự trên 1 trang (trang dài, cuộn xuống hoặc bấm hàng nút "nhảy nhanh"
          ngay dưới đầu trang để tới thẳng từng mục)

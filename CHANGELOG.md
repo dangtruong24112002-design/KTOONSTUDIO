@@ -30,3 +30,10 @@
   video, GPT-6 Luna cho việc lặt vặt...) — sandbox không vào được wavespeed.ai nên chưa tự kiểm tra lại
   được mã model/giá, cần owner xác nhận ở lần chạy key thật đầu tiên. Test bằng API giả, đã chạy
   checks_v2.py + e2e_v2.py pass.
+- 2026-09-29 Key và dữ liệu dự án tách khỏi thư mục code cho `tap_thu_v2` (docs/SPEC_TAP_THU_V2.md §17,
+  yêu cầu #5): key WaveSpeed/Atlas đọc theo thứ tự tap_thu_v2\keys.txt → ~/.ktoon/keys.txt; thêm ô nhập
+  key + nút "Lưu key" trong Cài đặt (chỉ hiện ****4 số cuối, không ghi log/state). Ảnh/video/state/chi phí
+  chuyển sang 1 thư mục dữ liệu riêng (mặc định ~/KTOON_DATA, đổi được trong Cài đặt, cần khởi động lại
+  app). Từ nay commit/push thẳng lên main khi test API giả pass, không mở PR nữa. Test bằng API giả, đã
+  chạy checks_v2.py + e2e_v2.py pass (script test cũng cập nhật để dữ liệu test nằm gọn trong thư mục
+  test, không lẫn vào thư mục dữ liệu thật).

@@ -125,9 +125,9 @@ check("real THAT-sourced image still refused for eyes even via ordinary upload p
 # 4) no key value ever appears in state.json, the ledger, the log, or the /api/state payload
 s = call("GET", "/api/state")
 blobs = {
-    "state.json": (RUN / "output" / "state.json").read_text() if (RUN / "output" / "state.json").exists() else "",
-    "nhat_ky.txt": (RUN / "output" / "nhat_ky.txt").read_text() if (RUN / "output" / "nhat_ky.txt").exists() else "",
-    "so_chi.csv": (RUN / "output" / "so_chi.csv").read_text() if (RUN / "output" / "so_chi.csv").exists() else "",
+    "state.json": (RUN / "data" / "output" / "state.json").read_text() if (RUN / "data" / "output" / "state.json").exists() else "",
+    "nhat_ky.txt": (RUN / "data" / "output" / "nhat_ky.txt").read_text() if (RUN / "data" / "output" / "nhat_ky.txt").exists() else "",
+    "so_chi.csv": (RUN / "data" / "output" / "so_chi.csv").read_text() if (RUN / "data" / "output" / "so_chi.csv").exists() else "",
     "/api/state": json.dumps(s),
 }
 for name, blob in blobs.items():

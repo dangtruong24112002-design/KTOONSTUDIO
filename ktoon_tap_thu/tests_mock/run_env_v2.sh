@@ -11,7 +11,7 @@ done
 sleep 0.5
 rm -rf "$RUN" && mkdir -p "$RUN"
 cp "$APP/app.py" "$APP/pipeline.py" "$APP/providers.py" "$APP/ui.html" "$RUN/"
-printf 'WAVESPEED_API_KEY=test-ws-key-123456\nATLASCLOUD_API_KEY=test-atlas-key-123456\nBUDGET_USD=%s\n' "${1:-30}" > "$RUN/keys.txt"
+printf 'WAVESPEED_API_KEY=test-ws-key-123456\nATLASCLOUD_API_KEY=test-atlas-key-123456\nBUDGET_USD=%s\nDATA_DIR=%s/data\n' "${1:-30}" "$RUN" > "$RUN/keys.txt"
 (cd "$HERE" && nohup python3 mock_providers.py 9200 > mock_v2.out 2>&1 & echo $! > "$HERE/mock_v2.pid")
 sleep 0.5
 (cd "$RUN" && KTOON_WS_BASE=http://127.0.0.1:9200/ws KTOON_WS_LLM=http://127.0.0.1:9200/llm \

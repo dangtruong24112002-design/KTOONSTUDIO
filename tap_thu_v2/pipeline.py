@@ -28,9 +28,53 @@ from pathlib import Path
 import providers
 from providers import ApiError
 
-HERE = Path(__file__).resolve().parent
-OUT = HERE / "output"
-PROJECTS = HERE / "projects"
+HERE = Path(__file__).resolve().parent  # the code folder — never used to store project data (yêu cầu #5.2),
+                                         # so replacing the code (by hand or by the self-updater, spec §17)
+                                         # never touches keys or data.
+
+
+def _read_keys_file(p):
+    """Pure KEY=VALUE reader, no side effects — used both by load_keys() and to bootstrap DATA_DIR
+    before the rest of the module can be defined."""
+    out = {}
+    if not p.exists():
+        return out
+    try:
+        for line in p.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            v = v.strip().strip('"').strip("'")
+            if v:
+                out[k.strip()] = v
+    except OSError:
+        pass
+    return out
+
+
+def ktoon_home_dir():
+    return Path.home() / ".ktoon"
+
+
+def home_keys_file():
+    return ktoon_home_dir() / "keys.txt"
+
+
+def _resolve_data_dir():
+    """Spec §17 (yêu cầu #5.2): project data lives outside the code folder by default (~/KTOON_DATA),
+    changeable via DATA_DIR= in either keys file — the local tap_thu_v2/keys.txt wins per-key over the
+    home one, same priority as load_keys(). Needs an app restart to take effect once changed."""
+    merged = dict(_read_keys_file(home_keys_file()))
+    merged.update(_read_keys_file(HERE / "keys.txt"))
+    v = merged.get("DATA_DIR", "").strip()
+    return Path(v).expanduser() if v else (Path.home() / "KTOON_DATA")
+
+
+DATA_DIR = _resolve_data_dir()
+OUT = DATA_DIR / "output"
+PROJECTS = DATA_DIR / "projects"
+EXPORT_DIR = DATA_DIR / "export"
 STATE_FILE = OUT / "state.json"
 LEDGER = OUT / "so_chi.csv"
 LOG_FILE = OUT / "nhat_ky.txt"
@@ -299,26 +343,50 @@ def log(msg):
 
 
 def load_keys():
-    keys = {}
-    for name in ("keys.txt", ".env"):
-        p = HERE / name
-        if not p.exists():
-            continue
-        for line in p.read_text(encoding="utf-8-sig").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            v = v.strip().strip('"').strip("'")
-            if v and k.strip() not in keys:
-                keys[k.strip()] = v
-    return keys
+    """Priority (yêu cầu #5.1): tap_thu_v2/keys.txt wins per-key when it has a value; the home-dir file
+    (where the Cài đặt "Lưu key" button writes) fills in anything missing there; .env is a last-ditch
+    legacy fallback."""
+    merged = dict(_read_keys_file(home_keys_file()))
+    merged.update(_read_keys_file(HERE / "keys.txt"))
+    for k, v in _read_keys_file(HERE / ".env").items():
+        merged.setdefault(k, v)
+    return merged
 
 
 def ensure_keys_file():
-    p = HERE / "keys.txt"
-    if not p.exists():
-        p.write_text("WAVESPEED_API_KEY=\nATLASCLOUD_API_KEY=\nBUDGET_USD=18\n", encoding="utf-8")
+    """The durable copy lives in the home dir so it survives a code update/replace; tap_thu_v2/keys.txt
+    stays supported for reads (existing installs) but is no longer created by default."""
+    if (HERE / "keys.txt").exists():
+        return
+    home = home_keys_file()
+    if not home.exists():
+        home.parent.mkdir(parents=True, exist_ok=True)
+        home.write_text("WAVESPEED_API_KEY=\nATLASCLOUD_API_KEY=\nBUDGET_USD=18\nDATA_DIR=\n", encoding="utf-8")
+
+
+def mask_key(value):
+    if not value:
+        return ""
+    return "****" + value[-4:] if len(value) > 4 else "****"
+
+
+def save_home_keys(updates):
+    """Write only the given fields into the home-dir keys file (the durable, update-safe copy — yêu cầu
+    #5.1), merged with whatever is already there. If a local tap_thu_v2/keys.txt also exists, mirror the
+    same fields into it too — load_keys() prefers the local file per-key for backward compat with existing
+    installs, so without this a save would silently have no visible effect for anyone who still has one.
+    Never logs or returns the values."""
+    p = home_keys_file()
+    existing = _read_keys_file(p)
+    existing.update({k: v for k, v in updates.items() if v is not None})
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("".join(f"{k}={v}\n" for k, v in existing.items()), encoding="utf-8")
+    local = HERE / "keys.txt"
+    if local.exists():
+        local_existing = _read_keys_file(local)
+        local_existing.update({k: v for k, v in updates.items() if v is not None})
+        local.write_text("".join(f"{k}={v}\n" for k, v in local_existing.items()), encoding="utf-8")
+    log(f"Đã lưu {', '.join(updates.keys())} vào {p}{' và ' + str(local) if local.exists() else ''} (giá trị không hiện trong log).")
 
 
 def budget():
@@ -362,7 +430,7 @@ def load_state():
 
 def save():
     with LOCK:
-        OUT.mkdir(exist_ok=True)
+        OUT.mkdir(parents=True, exist_ok=True)
         tmp = STATE_FILE.with_name("state.tmp")
         tmp.write_text(json.dumps(STATE, ensure_ascii=False, indent=1), encoding="utf-8")
         os.replace(tmp, STATE_FILE)
@@ -590,7 +658,7 @@ def add_component(char_id, data, ext, label, source, use, reflib_path=None):
         sub, fn = make_filename("component", v, ext, name=c["name"], label=label)
         dest = asset_dest(sub, fn)
         dest.write_bytes(data)
-        comp = {"id": f"c{v}", "file": str(dest.relative_to(HERE)), "label": label, "source": source, "use": use,
+        comp = {"id": f"c{v}", "file": str(dest.relative_to(DATA_DIR)), "label": label, "source": source, "use": use,
                 "created": ts(), "url": None}
     c["components"].append(comp)
     save()
@@ -951,7 +1019,7 @@ def url_of(job):
     if not job.get("file"):
         raise ApiError(f"{job.get('id', '?')} chưa có file để dùng làm tham chiếu.")
     path = Path(job["file"])
-    full = path if path.is_absolute() else HERE / path
+    full = path if path.is_absolute() else DATA_DIR / path
     ws = ws_client()
     url = ws.upload_local(full)
     job["url"] = url
@@ -1065,8 +1133,8 @@ def register_local(kind, target, path, provider="local", meta=None):
     """A file the owner uploaded (or ffmpeg produced): free, instant, same take/pick machinery as generated jobs."""
     with LOCK:
         job = _new_job(kind, target, provider, None, 1, 0.0, f"{STAGE_NAME.get(kind, kind)} ({target})", meta)
-        rel = path if (path and Path(path).is_absolute() and not str(path).startswith(str(HERE))) else (
-            str(Path(path).relative_to(HERE)) if path else None)
+        rel = path if (path and Path(path).is_absolute() and not str(path).startswith(str(DATA_DIR))) else (
+            str(Path(path).relative_to(DATA_DIR)) if path else None)
         job.update(status="done", cost=0.0, file=rel, t_end=ts())
         STATE["picks"][f"{kind}:{target}"] = job["id"]
     save()
@@ -1874,7 +1942,7 @@ def run_media(jid):
     try:
         providers.download(val, dest)
         with LOCK:
-            job["file"] = str(dest.relative_to(HERE))
+            job["file"] = str(dest.relative_to(DATA_DIR))
     except Exception as e:
         with LOCK:
             job["dl_error"] = scrub(str(e))
@@ -2000,7 +2068,7 @@ def new_fix(bid, start, end):
     fid = f"fix_{sum(len(e['fixes']) for e in STATE['episodes'].values()) + 1}"
     frame_path = OUT / "media" / "frame" / f"{fid}.jpg"
     frame_path.parent.mkdir(parents=True, exist_ok=True)
-    r = subprocess.run([ff, "-y", "-v", "error", "-ss", str(start), "-i", str(HERE / clip["file"]),
+    r = subprocess.run([ff, "-y", "-v", "error", "-ss", str(start), "-i", str(DATA_DIR / clip["file"]),
                         "-frames:v", "1", str(frame_path)], capture_output=True, text=True, errors="replace")
     if r.returncode != 0:
         raise ValueError("ffmpeg lỗi khi cắt khung hình: " + r.stderr[-300:])
@@ -2014,7 +2082,7 @@ def new_fix(bid, start, end):
 def do_export(eid):
     ep = episode(eid)
     proj = proj_name()
-    dst = HERE / "export" / eid
+    dst = EXPORT_DIR / eid
     dst.mkdir(parents=True, exist_ok=True)
     lines, files = [], []
     order = [b["id"] for b in ep["batches"]]
@@ -2022,7 +2090,7 @@ def do_export(eid):
         j = pick("gen", bid)
         if j and j.get("file"):
             name = Path(j["file"]).name
-            shutil.copy2(HERE / j["file"], dst / name)
+            shutil.copy2(DATA_DIR / j["file"], dst / name)
             b = next(x for x in ep["batches"] if x["id"] == bid)
             lines.append(f"{bid}\t{name}\t0-{b['duration']}s")
             files.append(name)
@@ -2030,7 +2098,7 @@ def do_export(eid):
         j = pick("patch", fid)
         if j and j.get("file"):
             name = Path(j["file"]).name
-            shutil.copy2(HERE / j["file"], dst / name)
+            shutil.copy2(DATA_DIR / j["file"], dst / name)
             lines.append(f"{f['batch']} patch\t{name}\t{f['start']}-{f['end']}s")
             files.append(name)
     (dst / "danh_sach.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -2047,7 +2115,7 @@ def do_export(eid):
             if r.returncode == 0:
                 joined = out.name
     with LOCK:
-        ep["export"] = {"status": "done", "dir": str(dst.relative_to(HERE)), "n": len(lines), "t": ts(),
+        ep["export"] = {"status": "done", "dir": str(dst.relative_to(DATA_DIR)), "n": len(lines), "t": ts(),
                         "joined": joined, "files": files}
     save()
     log(f"Đã xuất {len(lines)} file vào {dst}")
@@ -2115,7 +2183,9 @@ def public_state():
                 "video_refs": STATE["video_refs"], "settings": STATE["settings"],
                 "chats": STATE["chats"], "llm_vision_ok": STATE.get("llm_vision_ok", True),
                 "jobs": jobs, "picks": STATE["picks"], "todo": todo, "by_stage": by_stage, "budget": budget(),
-                "keys": {p: bool(KEYS.get(k)) for p, k in KEY_OF.items()}, "money": {"spent": money()[0], "reserved": money()[1]},
+                "keys": {p: bool(KEYS.get(k)) for p, k in KEY_OF.items()},
+                "key_preview": {p: mask_key(KEYS.get(k)) for p, k in KEY_OF.items()},
+                "data_dir": str(DATA_DIR), "money": {"spent": money()[0], "reserved": money()[1]},
                 "balance": STATE["balance"], "cost": cost_summary(), "component_uses": COMPONENT_USES,
                 "ffmpeg": bool(shutil.which("ffmpeg")), "tier_name": TIER_NAME,
                 "running": len(RUNNING), "stage_names": STAGE_NAME,
