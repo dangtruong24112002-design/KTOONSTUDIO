@@ -9,3 +9,16 @@
   patch workflow, export, and a Chi phí tab split into once-per-series vs per-episode spend. Tested
   end-to-end against `ktoon_tap_thu/tests_mock` (extended mock providers + Playwright e2e + extra
   hard-rule checks), never against real keys.
+- 2026-09-29 `tap_thu_v2/` addendum #3 (docs/SPEC_TAP_THU_V2.md §15, supersedes the fixed S1/S2a/S2b/S3
+  flow above): series-level script/shot-list and character/environment/prop/style-list input (upload
+  .txt/.md/.docx/.xlsx/.csv via stdlib zipfile+ElementTree, or paste) auto-split into episodes that keep
+  the owner's own shot count/dialogue/duration; owner-saved prompt templates per asset type that GPT
+  fills instead of hardcoded prompts; a local reference-image library (AI\\/THAT\\ convention) scanned
+  once with vision auto-tagging and GPT-suggested per-character components, enforcing real-photo ->
+  never face/eyes everywhere; deterministic (no-LLM) per-episode batch splitting with hook/cliffhanger/
+  normal tiers and Seedance 2.5/2.0 defaults; one-click bulk generation buttons for portraits/sheets/
+  environments/props; per-episode batch prompt writing with generalized last-frame chaining between any
+  consecutive batches; and a rewritten single continuous-page UI (series inputs on top, one card per
+  episode below) that protects in-progress edits anywhere on the page from being clobbered by unrelated
+  background job updates. Rewrote `e2e_v2.py`/`checks_v2.py` for the new flow (still mocks only) and
+  fixed two rendering staleness bugs and one focus-tracking bug found while building the new UI.

@@ -20,14 +20,8 @@ FAIL_FIRST_LIP = [True]
 LOCK = threading.Lock()
 
 # ---------------------------------------------------------------- tap_thu_v2 canned LLM / media outputs
-STYLE_TEXT = ("Photoreal, warm-cool contrast lighting; handheld push-ins on close-ups, locked wide on "
-              "establishing shots. Corporate-thriller palette: cold blue corridors, warm amber boardroom. "
-              "Pacing is fast in the hook, slows for the twist, snaps back for the cliffhanger. Camera favours "
-              "shoulder-level medium shots with a shallow depth of field. Mood: quiet tension under a polished "
-              "surface, breaking into open confrontation by the final beat.")
 
-
-def shots_json_v2():
+def _ep_shots():
     descs = ["Ethan steps out of the elevator, toolbox in hand.", "Claire stops him in the corridor.",
              "Mark confronts Ethan, spills coffee on him.", "Claire hands Ethan a napkin, a look passes between them.",
              "Board members wait in the glass boardroom.", "Ethan steps in, calm."]
@@ -44,27 +38,34 @@ def shots_json_v2():
             speaker, line = "Ethan", "Actually... I own this building."
         shots.append({"id": f"SH{i:02d}", "duration": 5, "location": loc, "cast": cast, "props": [],
                       "desc": desc, "speaker": speaker, "line": line})
-    return json.dumps({"shots": shots})
+    return shots
 
 
-def seq_json_v2():
-    return json.dumps({
-        "S1": {"shot_ids": ["SH01", "SH02"], "tag": "hook", "raccord_in": "", "raccord_out": "ends on Ethan's face, held"},
-        "S2": {"shot_ids": ["SH03", "SH04"], "tag": "key", "raccord_in": "opens on the corridor", "raccord_out": "cut to the boardroom door"},
-        "S3": {"shot_ids": ["SH05", "SH06"], "tag": "cliffhanger", "raccord_in": "", "raccord_out": ""},
-    })
+def split_episodes_json_v2():
+    return json.dumps({"episodes": [{"id": "EP01", "name": "Episode 1", "shots": _ep_shots()},
+                                    {"id": "EP02", "name": "Episode 2", "shots": _ep_shots()}]})
 
 
-def preprod_json_v2():
+def parse_list_json_v2():
     return json.dumps({
         "characters": [{"name": "Ethan", "desc": "33-year-old billionaire disguised as maintenance staff, navy work jacket, calm and observant."},
                        {"name": "Claire", "desc": "29-year-old sharp CFO in a cream blouse."},
                        {"name": "Mark", "desc": "40-year-old floor manager in a grey suit, dismissive."}],
         "environments": [{"name": "Corridor", "tag": "INT", "time": "day", "desc": "40th floor glass corridor, cool daylight."},
                          {"name": "Boardroom", "tag": "INT", "time": "day", "desc": "Glass boardroom, skyline view."}],
-        "props": [{"name": "Toolbox", "desc": "Worn metal maintenance toolbox."}]})
+        "props": [{"name": "Toolbox", "desc": "Worn metal maintenance toolbox."}],
+        "style": "ultra realistic 8K Hollywood film, photoreal skin texture, cinematic color grade"})
 
 
+def preprod_json_v2():
+    return parse_list_json_v2()
+
+
+REFLIB_TAG_JSON = json.dumps({"label": "reference image, front view", "use": "hair"})
+SUGGEST_COMPONENTS_JSON = json.dumps({"picks": [0, 1]})
+TEMPLATE_FILL_TEXT = ("Photoreal white-background reference image, ultra realistic 8K Hollywood film look, "
+                     "photoreal skin texture, cinematic color grade, combining the given references exactly. "
+                     "No text, no watermark.")
 REWRITE_TEXT = ("Keep the exact identity, face, aspect ratio and background unchanged; only lighten the jacket "
                 "color to navy blue as requested, nothing else.")
 CRITIQUE_TEXT = ("- Missing the back view on the sheet's right panel.\n- Background reads slightly off-white, "
@@ -156,14 +157,18 @@ class H(BaseHTTPRequestHandler):
             time.sleep(0.5)
             if "head writer" in sysmsg:
                 content = SCRIPT
-            elif "PARSER, not a writer" in sysmsg:
-                content = shots_json_v2()
+            elif "covering several episodes in one document" in sysmsg:
+                content = split_episodes_json_v2()
+            elif "characters, environments, props and a shared" in sysmsg:
+                content = parse_list_json_v2()
             elif "production coordinator" in sysmsg:
                 content = preprod_json_v2()
-            elif "cinematographer" in sysmsg:
-                content = STYLE_TEXT
-            elif "exactly 3 sequences" in sysmsg:
-                content = seq_json_v2()
+            elif "character-asset library" in sysmsg:
+                content = REFLIB_TAG_JSON
+            elif "reference-component images" in sysmsg:
+                content = SUGGEST_COMPONENTS_JSON
+            elif "fill in an image-generation prompt template" in sysmsg:
+                content = TEMPLATE_FILL_TEXT
             elif "Omni Reference prompt" in sysmsg:
                 content = prompt_text_v2("S1")
             elif "review one Seedance video prompt" in sysmsg:

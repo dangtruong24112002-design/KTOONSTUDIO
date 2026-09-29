@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KTOONSTUDIO · tập thử v2 (sequence 30 s + Omni Reference). Xem docs/SPEC_TAP_THU_V2.md.
+"""KTOONSTUDIO · tập thử v2 (series + tập, batch Omni Reference). Xem docs/SPEC_TAP_THU_V2.md §15.
 
 Bấm đúp chay_windows.bat (Windows) hoặc chay_mac.command (Mac): app mở giao diện trên trình duyệt.
 Key đọc từ keys.txt (WAVESPEED_API_KEY, ATLASCLOUD_API_KEY, BUDGET_USD), không bao giờ gửi ra
@@ -136,6 +136,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/upload":
                 return self._send(200, self.upload(parse_qs(parsed.query), raw))
+            if path == "/api/upload_text":
+                return self._send(200, self.upload_text(parse_qs(parsed.query), raw))
             data = json.loads(raw.decode("utf-8") or "{}")
             return self._send(200, self.route(path, data))
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -159,6 +161,23 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True, "job": job["id"]}
         except (ValueError, P.ApiError) as e:
             return {"error": str(e)}
+
+    def upload_text(self, q, raw):
+        purpose = (q.get("purpose") or [""])[0]
+        filename = (q.get("filename") or ["file.txt"])[0]
+        try:
+            text = P.extract_text(raw, filename)
+        except ValueError as e:
+            return {"error": str(e)}
+        with LOCK:
+            if purpose == "script":
+                STATE["script_raw"] = (STATE["script_raw"] + "\n\n" + text).strip() if STATE["script_raw"].strip() else text
+            elif purpose == "list":
+                STATE["list_raw"] = (STATE["list_raw"] + "\n\n" + text).strip() if STATE["list_raw"].strip() else text
+            else:
+                return {"error": "purpose không hợp lệ."}
+        P.save()
+        return {"ok": True, "chars": len(text)}
 
     def route(self, path, d):
         try:
@@ -206,15 +225,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/project":
             with LOCK:
                 STATE["project"]["name"] = str(d.get("name") or STATE["project"]["name"]).strip() or STATE["project"]["name"]
-                try:
-                    STATE["project"]["episode"] = int(d.get("episode") or STATE["project"]["episode"])
-                except (TypeError, ValueError):
-                    pass
             P.save()
             return {"ok": True}
-        if path == "/api/script":
+        if path == "/api/script_raw":
             with LOCK:
-                STATE["script"] = str(d.get("text") or "")
+                STATE["script_raw"] = str(d.get("text") or "")
+            P.save()
+            return {"ok": True}
+        if path == "/api/list_raw":
+            with LOCK:
+                STATE["list_raw"] = str(d.get("text") or "")
             P.save()
             return {"ok": True}
         if path == "/api/style":
@@ -222,74 +242,23 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["style"] = str(d.get("text") or "")
             P.save()
             return {"ok": True}
-        if path == "/api/seq":
+        if path == "/api/template":
+            key = d.get("key")
+            if key not in STATE["templates"]:
+                return {"error": "Không có mẫu này."}
             with LOCK:
-                new = P.normalize_seq(d.get("seq"))
-                STATE["seq"] = new
-                STATE["seq_v"] += 1
+                STATE["templates"][key] = str(d.get("text") or "")
             P.save()
             return {"ok": True}
-        if path == "/api/seq/storyboards":
-            with LOCK:
-                seqk, on = d.get("seqk"), bool(d.get("on"))
-                if seqk not in STATE["seq"]:
-                    return {"error": "Không có sequence này."}
-                STATE["seq"][seqk]["use_storyboards"] = on
-            P.save()
-            return {"ok": True}
-        if path == "/api/shots":
-            with LOCK:
-                STATE["shots_raw"] = str(d.get("text") or "")
-            P.save()
-            return {"ok": True}
-        if path == "/api/shots/save":
-            with LOCK:
-                STATE["shots"] = P.normalize_shots(d.get("shots") or {})
-                STATE["shots_v"] += 1
-            P.save()
-            return {"ok": True}
-        if path == "/api/shot/storyboard":
-            with LOCK:
-                sh = P.shot_by_id(d.get("id"))
-                if not sh:
-                    return {"error": "Không có shot này."}
-                sh["storyboard_on"] = bool(d.get("on"))
-            P.save()
-            return {"ok": True}
+        if path == "/api/reflib/path":
+            r = P.reflib_set_path(str(d.get("path") or ""))
+            return {"ok": True, **r}
         if path == "/api/approve":
             P.set_approved(d.get("bank"), d.get("id"), bool(d.get("approved")))
             return {"ok": True}
         if path == "/api/chat":
             return P.create_chat_job(d.get("kind"), d.get("target"), str(d.get("text") or ""), d.get("model"),
                                       d.get("resolution") or "2k", d.get("attachments") or [], bool(d.get("dry")))
-        if path == "/api/prompt":
-            gen = d.get("gen")
-            if gen not in P.GENS:
-                return {"error": "gen không hợp lệ."}
-            with LOCK:
-                p = STATE["prompts"].setdefault(gen, {})
-                if "text" in d:
-                    p["text"] = str(d.get("text") or "")
-                    p["approved"] = False
-                if "approved" in d:
-                    p["approved"] = bool(d.get("approved"))
-            P.save()
-            return {"ok": True}
-        if path == "/api/qc":
-            gen = d.get("gen")
-            if gen not in P.GENS:
-                return {"error": "gen không hợp lệ."}
-            with LOCK:
-                q = STATE["qc"].setdefault(gen, {})
-                for k in ("sharp", "raccord", "voice"):
-                    if k in d:
-                        q[k] = bool(d[k])
-                if "note" in d:
-                    q["note"] = str(d.get("note") or "")
-                if "result" in d and d["result"] in ("pass", "fail", None):
-                    q["result"] = d["result"]
-            P.save()
-            return {"ok": True}
         if path == "/api/char/new":
             return {"ok": True, "char": P.new_char(str(d.get("name") or "").strip())}
         if path == "/api/char/desc":
@@ -327,23 +296,91 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True, "voice": P.new_voice(str(d.get("name") or "").strip(), str(d.get("char") or ""))}
         if path == "/api/videoref/new":
             return {"ok": True, "ref": P.new_video_ref(str(d.get("name") or "").strip())}
+        if path == "/api/episode/new":
+            return {"ok": True, "episode": P.new_episode(str(d.get("name") or "").strip())}
+        if path == "/api/episode/shots":
+            with LOCK:
+                eid = d.get("ep")
+                ep = STATE["episodes"].get(eid)
+                if not ep:
+                    return {"error": "Không có tập này."}
+                ep["shots"] = P.normalize_shots_for_episode(eid, d.get("shots") or [])
+            P.save()
+            return {"ok": True}
+        if path == "/api/episode/batches/split":
+            with LOCK:
+                eid = d.get("ep")
+                if eid not in STATE["episodes"]:
+                    return {"error": "Không có tập này."}
+                STATE["episodes"][eid]["batches"] = P.split_batches(eid)
+            P.save()
+            return {"ok": True}
+        if path == "/api/episode/batches/save":
+            with LOCK:
+                eid = d.get("ep")
+                if eid not in STATE["episodes"]:
+                    return {"error": "Không có tập này."}
+                STATE["episodes"][eid]["batches"] = P.normalize_batches(eid, d.get("batches") or [])
+            P.save()
+            return {"ok": True}
+        if path == "/api/shot/storyboard":
+            with LOCK:
+                sh = P.shot_by_id(d.get("id"))
+                if not sh:
+                    return {"error": "Không có shot này."}
+                sh["storyboard_on"] = bool(d.get("on"))
+            P.save()
+            return {"ok": True}
+        if path == "/api/prompt":
+            bid = d.get("batch")
+            ep, b = P.batch_by_id(bid)
+            if not b:
+                return {"error": "Không có batch này."}
+            with LOCK:
+                p = ep["prompts"].setdefault(bid, {})
+                if "text" in d:
+                    p["text"] = str(d.get("text") or "")
+                    p["approved"] = False
+                if "approved" in d:
+                    p["approved"] = bool(d.get("approved"))
+            P.save()
+            return {"ok": True}
+        if path == "/api/qc":
+            bid = d.get("batch")
+            ep, b = P.batch_by_id(bid)
+            if not b:
+                return {"error": "Không có batch này."}
+            with LOCK:
+                q = ep["qc"].setdefault(bid, {})
+                for k in ("sharp", "raccord", "voice"):
+                    if k in d:
+                        q[k] = bool(d[k])
+                if "note" in d:
+                    q["note"] = str(d.get("note") or "")
+                if "result" in d and d["result"] in ("pass", "fail", None):
+                    q["result"] = d["result"]
+            P.save()
+            return {"ok": True}
         if path == "/api/fix/new":
-            f = P.new_fix(d.get("gen"), d.get("start", 0), d.get("end", 10))
+            f = P.new_fix(d.get("batch"), d.get("start", 0), d.get("end", 10))
             return {"ok": True, "fix": f}
         if path == "/api/fix/prompt":
+            f = P._find_fix_safe(d.get("id"))
+            if not f:
+                return {"error": "Không có fix này."}
             with LOCK:
-                f = STATE["fixes"].get(d.get("id"))
-                if not f:
-                    return {"error": "Không có fix này."}
                 f["prompt"] = str(d.get("text") or "")
             P.save()
             return {"ok": True}
         if path == "/api/export":
+            eid = d.get("ep")
+            if eid not in STATE["episodes"]:
+                return {"error": "Không có tập này."}
             with LOCK:
-                if STATE.get("export", {}).get("status") == "running":
+                if STATE["episodes"][eid]["export"].get("status") == "running":
                     return {"error": "Đang xuất."}
-                STATE["export"] = {"status": "running", "t": P.ts()}
-            threading.Thread(target=P.do_export, daemon=True).start()
+                STATE["episodes"][eid]["export"] = {"status": "running", "t": P.ts()}
+            threading.Thread(target=P.do_export, args=(eid,), daemon=True).start()
             return {"ok": True}
         if path == "/api/settings":
             new = d.get("settings") or {}

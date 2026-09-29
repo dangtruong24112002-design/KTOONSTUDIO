@@ -1,4 +1,4 @@
-"""Extra hard-rule checks for tap_thu_v2 (spec SPEC_TAP_THU_V2.md §10 "Also test"), against the
+"""Extra hard-rule checks for tap_thu_v2 (spec SPEC_TAP_THU_V2.md, addendum #3 / mục 15), against the
 mock-backed instance started by run_env_v2.sh. Pure HTTP (urllib), no browser, no LLM calls needed —
 sets up its own minimal fixtures. Run BEFORE e2e_v2.py on a fresh instance. Never calls real APIs.
 """
@@ -32,14 +32,8 @@ def check(name, cond):
         fails.append(name)
 
 
-SEQ = {k: {"time_range": [0, 30], "location": "Corridor", "characters": ["Ethan"], "props": [], "tag": t,
-           "beats": [{"t0": 0, "t1": 30, "action": "placeholder"}], "lines": [],
-           "raccord_in": "", "raccord_out": "", "video_refs": []}
-       for k, t in (("S1", "hook"), ("S2", "normal"), ("S3", "cliffhanger"))}
-
-call("POST", "/api/project", {"name": "ChecksProj", "episode": 1})
+call("POST", "/api/project", {"name": "ChecksProj"})
 ch = call("POST", "/api/char/new", {"name": "Ethan"})["char"]
-call("POST", "/api/seq", {"seq": SEQ})
 
 # 1) real + face is refused
 r = call("POST", f"/api/upload?kind=component&char={ch['id']}&label=x&source=real&use=face&ext=.jpg",
@@ -60,15 +54,37 @@ call("POST", "/api/approve", {"bank": "chars", "id": pre["char"]["id"], "approve
 p_blocked = call("POST", "/api/run", {"stage": "portrait", "target": pre["char"]["id"], "dry": True})
 check("unapproved bank item blocked from image generation", bool(p_blocked.get("error")))
 
-# 2) gen for S2b blocked on prompt approval first
-p1 = call("POST", "/api/run", {"stage": "gen", "target": "S2b", "dry": True})
-check("S2b gen blocked before its prompt is approved", bool(p1.get("error")))
+# 2) batch splitting + gen dependency chain (addendum #3 §15 B.8/B.10)
+ep = call("POST", "/api/episode/new", {"name": "Checks"})["episode"]
+eid = ep["id"]
+shots = [
+    {"id": "SH01", "duration": 10, "location": "Corridor", "cast": ["Ethan"], "desc": "a"},
+    {"id": "SH02", "duration": 10, "location": "Boardroom", "cast": ["Ethan"], "desc": "b"},
+]
+call("POST", "/api/episode/shots", {"ep": eid, "shots": shots})
+call("POST", "/api/episode/batches/split", {"ep": eid})
+st = call("GET", "/api/state")
+batches = st["episodes"][eid]["batches"]
+check("two locations produce two batches", len(batches) == 2)
+b1, b2 = batches[0]["id"], batches[1]["id"]
+check("first batch is hook tier", st["episodes"][eid]["batches"][0]["tier"] == "hook")
+check("last batch is cliffhanger tier", st["episodes"][eid]["batches"][1]["tier"] == "cliffhanger")
 
-# approve S2b's prompt directly (bypassing the LLM) to isolate the S2a-last-frame dependency
-call("POST", "/api/prompt", {"gen": "S2b", "text": "placeholder prompt", "approved": True})
-p2 = call("POST", "/api/run", {"stage": "gen", "target": "S2b", "dry": True})
-check("S2b gen blocked without S2a's last frame (once its own prompt is approved)",
-      bool(p2.get("error")) and "S2a" in p2["error"])
+p1 = call("POST", "/api/run", {"stage": "gen", "target": b2, "dry": True})
+check(f"{b2} gen blocked before its prompt is approved", bool(p1.get("error")))
+
+# approve b2's prompt directly (bypassing the LLM) to isolate the last-frame dependency
+call("POST", "/api/prompt", {"batch": b2, "text": "placeholder prompt", "approved": True})
+p2 = call("POST", "/api/run", {"stage": "gen", "target": b2, "dry": True})
+check(f"{b2} gen blocked without {b1}'s last frame (once its own prompt is approved)",
+      bool(p2.get("error")) and b1 in p2["error"])
+
+# an episode-wide bulk gen call must silently skip a batch waiting on the previous one's
+# last frame instead of erroring the whole batch out (addendum #3 §15 B.10: "batch nối tiếp chờ...")
+call("POST", "/api/prompt", {"batch": b1, "text": "placeholder prompt", "approved": True})
+p3 = call("POST", "/api/run", {"stage": "gen", "target": eid, "dry": True})
+check(f"episode-wide gen dry-run only offers {b1} (waits on it before {b2})",
+      not p3.get("error") and p3["n"] == 1 and b1 in p3["items"][0])
 
 # 2b) max_edits_per_image caps chat-edit attempts (addendum #2 §7)
 call("POST", f"/api/upload?kind=component&char={ch['id']}&label=face&source=ai&use=face&ext=.jpg", raw=b"\xff\xd8\xff\xe0fake")
@@ -85,7 +101,28 @@ c2 = call("POST", "/api/chat", {"kind": "portrait", "target": ch["id"], "text": 
                                 "model": "bytedance/seedream-v5.0-flash/edit", "resolution": "2k"})
 check("chat-edit blocked once max_edits_per_image is reached", bool(c2.get("error")))
 
-# 3) no key value ever appears in state.json, the ledger, the log, or the /api/state payload
+# 3) reference library: a THAT\ (real) image can never be suggested/tagged for face/eyes (addendum #3 §15 A.4)
+reflib_dir = RUN / "reflib_fixture"
+(reflib_dir / "AI").mkdir(parents=True, exist_ok=True)
+(reflib_dir / "THAT").mkdir(parents=True, exist_ok=True)
+img_bytes = (HERE / "files" / "img.jpg").read_bytes()
+(reflib_dir / "AI" / "face1.jpg").write_bytes(img_bytes)
+(reflib_dir / "THAT" / "costume1.jpg").write_bytes(img_bytes)
+rl = call("POST", "/api/reflib/path", {"path": str(reflib_dir)})
+check("reflib path accepted", rl.get("ok"))
+call("POST", "/api/run", {"stage": "reflib_scan"})
+for _ in range(30):
+    st = call("GET", "/api/state")
+    if st["reflib"]["n_unscanned"] == 0 and st["reflib"]["n_scanned"] >= 2:
+        break
+    time.sleep(0.3)
+check("reflib scan tagged both images", st["reflib"]["n_scanned"] >= 2 and st["reflib"]["n_unscanned"] == 0)
+# add_component with a real-sourced reflib path must still refuse face/eyes even if mis-tagged upstream
+that_path = str(reflib_dir / "THAT" / "costume1.jpg")
+rc = call("POST", f"/api/upload?kind=component&char={ch['id']}&label=x&source=real&use=eyes&ext=.jpg", raw=img_bytes)
+check("real THAT-sourced image still refused for eyes even via ordinary upload path", bool(rc.get("error")))
+
+# 4) no key value ever appears in state.json, the ledger, the log, or the /api/state payload
 s = call("GET", "/api/state")
 blobs = {
     "state.json": (RUN / "output" / "state.json").read_text() if (RUN / "output" / "state.json").exists() else "",
