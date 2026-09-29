@@ -69,3 +69,15 @@
   shot (2.3 từ/giây + thời gian thở). Ngưỡng rút gọn tài liệu tăng lên ~6.000 từ. Test bằng API giả với 2
   tài liệu mẫu giống cấu trúc owner đưa (`ktoon_tap_thu/tests_mock/knowledge_check.py`, viết lại thành 55
   bước) cộng `checks_v2.py` + `e2e_v2.py` + `update_check.py` chạy lại trên instance mới đều pass.
+- 2026-09-29 Thêm `tap1/` — app tối giản mới (yêu cầu #8), dừng phát triển tiếp `tap_thu_v2/` (giữ nguyên,
+  không xoá): 1 trang tiếng Việt, 3 bước, dự án "The Alpha", đúng 1 tập (EP01). Bước 1: dán hồ sơ nhân vật
+  + prompt mẫu ảnh → GPT viết prompt ảnh từng người → Seedream text-to-image (không ảnh ref), nền trắng
+  đơn, duyệt hoặc tải ảnh riêng thay thế. Bước 2: dán nguyên văn shot list + prompt mẫu video → GPT gom
+  shot thành batch (≤30s, không cắt ngang thoại, kiểm tra thoại 2.3 từ/giây) và viết 1 prompt/batch, tự
+  ghi @Image1, @Image2… cho nhân vật đã duyệt có mặt trong batch. Bước 3: Seedance 2.5 (mặc định)/2.0,
+  720p 9:16, "Gen tất cả" hiện tổng tiền ước tính trước khi xác nhận, "Gen lại" tối đa 2 lần/batch, video
+  xem ngay trên trang, lưu vào tap1/output đặt tên The_Alpha_EP01_B01_v1.mp4… Chọn được model LLM
+  (Claude Opus 5.5 mặc định, GPT-6 Astra, GPT-6 Sol), thanh trên hiện tiền đã chi + số dư 2 tài khoản, lỗi
+  hết tiền/sai key báo riêng rõ ràng. Tái dùng nguyên cách gọi API, đọc key (tap1\keys.txt rồi
+  ~/.ktoon/keys.txt), sổ chi và cơ chế resume từ `tap_thu_v2/` (copy + rút gọn, không import chéo). Test
+  bằng API giả (`ktoon_tap_thu/tests_mock/tap1_check.py`, 39 bước) — pass.

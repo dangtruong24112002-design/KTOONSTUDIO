@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tap1 — The Alpha EP01</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; background: #f4f5f7; color: #1c1e21; }
+  header { position: sticky; top: 0; z-index: 5; background: #1c2530; color: #fff; padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; font-size: 13px; }
+  header b { font-size: 15px; }
+  header .sp { flex: 1; }
+  header select { background: #2c3a4c; color: #fff; border: 1px solid #46566b; border-radius: 6px; padding: 4px 6px; }
+  main { max-width: 900px; margin: 0 auto; padding: 14px; }
+  section.card { background: #fff; border: 1px solid #e2e4e8; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  h2 { font-size: 14px; margin: 14px 0 6px; color: #555; }
+  p.hint { color: #667; font-size: 12.5px; line-height: 1.5; margin: 4px 0 10px; }
+  textarea, input[type=text] { width: 100%; font: inherit; font-size: 13px; border: 1px solid #d3d7dd; border-radius: 6px;
+    padding: 8px; resize: vertical; }
+  textarea { min-height: 70px; }
+  label.fld { display: block; font-size: 12.5px; color: #555; margin: 6px 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  button { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 6px; border: 1px solid #cfd4db;
+    background: #fff; cursor: pointer; }
+  button.primary { background: #2457d9; border-color: #2457d9; color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.link { border: none; background: none; color: #b3261e; text-decoration: underline; padding: 2px 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid #e2e4e8; border-radius: 8px; padding: 10px; background: #fafbfc; }
+  .tile img, .tile video { width: 100%; border-radius: 6px; background: #111; aspect-ratio: 9/16; object-fit: cover; }
+  .chip { display: inline-block; background: #eef1f6; border-radius: 20px; padding: 2px 8px; font-size: 11.5px; color: #445; }
+  .warn { background: #fff4e5; border: 1px solid #ffd7a0; color: #7a4a00; border-radius: 6px; padding: 6px 8px; font-size: 12px; margin: 6px 0; }
+  .err { color: #b3261e; font-size: 12px; margin: 4px 0; }
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid #ccc; border-top-color: #2457d9;
+    border-radius: 50%; animation: sp 0.7s linear infinite; margin-right: 5px; vertical-align: -1px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #toast { position: fixed; right: 12px; bottom: 12px; z-index: 50; display: flex; flex-direction: column; gap: 6px; }
+  #toast div { background: #1c2530; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; max-width: 320px; }
+  #toast div.bad { background: #7a2018; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 60; }
+  #modal .box { background: #fff; border-radius: 10px; padding: 18px; max-width: 420px; width: 92%; }
+  #modal ul { font-size: 13px; max-height: 220px; overflow: auto; padding-left: 18px; }
+  #offline { position: fixed; inset: 0; background: #1c2530; color: #fff; display: flex; align-items: center;
+    justify-content: center; text-align: center; padding: 20px; z-index: 99; }
+</style>
+</head>
+<body>
+<header id="hdr"></header>
+<main id="main"></main>
+<div id="toast"></div>
+<div id="modal" hidden><div class="box">
+  <h1 id="mTitle"></h1>
+  <div id="mBody"></div>
+  <div class="row" style="justify-content:flex-end">
+    <button id="mCancel">Huỷ</button>
+    <button class="primary" id="mOk">Chạy</button>
+  </div>
+</div></div>
+<div id="offline" hidden>Mất kết nối tới app — kiểm tra cửa sổ chạy app còn mở không, hoặc bấm F5.</div>
+<script>
+const TOKEN = "__TAP1_TOKEN__";
+const $ = s => document.querySelector(s);
+let S = null, fatal = false;
+
+async function api(path, body) {
+  const opt = { headers: { "X-Tap1-Token": TOKEN } };
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (r.status === 403) { fatal = true; $("#offline").hidden = false; throw new Error("token"); }
+  return r.json();
+}
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function usd(n, d) { return "$" + Number(n || 0).toFixed(d == null ? 2 : d); }
+function toast(msg, bad) {
+  const d = document.createElement("div"); d.textContent = msg; if (bad) d.className = "bad";
+  $("#toast").appendChild(d); setTimeout(() => d.remove(), bad ? 9000 : 4000);
+}
+function ask(title, html) {
+  return new Promise(res => {
+    $("#mTitle").textContent = title; $("#mBody").innerHTML = html;
+    $("#modal").hidden = false;
+    const done = v => { $("#modal").hidden = true; $("#mOk").onclick = null; $("#mCancel").onclick = null; res(v); };
+    $("#mOk").onclick = () => done(true);
+    $("#mCancel").onclick = () => done(false);
+  });
+}
+const ACTIVE = ["queued", "starting", "running"];
+const ST_VI = { queued: "chờ", starting: "bắt đầu", running: "đang chạy", done: "xong", failed: "lỗi", stalled: "quá giờ" };
+
+function jobs(kind, target) {
+  return (S.jobs || []).filter(j => j.kind === kind && (target == null || j.target === target));
+}
+function lastJob(kind, target) { const js = jobs(kind, target); return js[js.length - 1]; }
+
+async function runStage(stage, target, redo) {
+  const dry = await api("/api/run", { stage, target, redo, dry: true });
+  if (dry.error) { toast(dry.error, true); return; }
+  if (!dry.n) { toast("Không có việc nào để chạy."); return; }
+  const html = `<ul>${dry.items.map(x => `<li>${esc(x)}</li>`).join("")}</ul><p><b>Tổng ước tính: ${usd(dry.est, 3)}</b></p>`;
+  const ok = await ask("Xác nhận chạy?", html);
+  if (!ok) return;
+  const r = await api("/api/run", { stage, target, redo });
+  if (r.error) toast(r.error, true);
+  await refresh();
+}
+
+function itemBtn(stage, target, label, redo, disabled) {
+  return `<button ${disabled ? "disabled" : ""} data-act="run" data-stage="${stage}" data-target="${esc(target)}" ${redo ? 'data-redo="1"' : ""}>${esc(label)}</button>`;
+}
+
+function renderHeader() {
+  const bw = (S.balance.wavespeed || {}).now, ba = (S.balance.atlas || {}).now;
+  $("#hdr").innerHTML = `<b>tap1 — ${esc(S.project)} · ${esc(S.episode)}</b>
+    <span>Đã chi: ${usd(S.money.spent, 3)} ${S.money.reserved ? `(+${usd(S.money.reserved, 3)} đang chờ)` : ""} / trần ${usd(S.budget)}</span>
+    <span>Số dư WaveSpeed: ${bw == null ? "?" : usd(bw)} · Atlas: ${ba == null ? "?" : usd(ba)}</span>
+    <span class="sp"></span>
+    <label>Model LLM: <select id="llmModel">${S.llm_catalog.map(m => `<option value="${m.id}" ${m.id === S.settings.llm_model ? "selected" : ""}>${esc(m.label)} ($${m.price_in}/$${m.price_out} /1M)</option>`).join("")}</select></label>`;
+  $("#llmModel").onchange = async e => { await api("/api/settings", { llm_model: e.target.value }); await refresh(); };
+}
+
+function charTile(c) {
+  const j = lastJob("char_gen", c.id);
+  const pick = (S.picks || {})["char_gen:" + c.id];
+  const shown = (S.jobs || []).find(x => x.id === pick) || j;
+  const busy = j && ACTIVE.includes(j.status);
+  return `<div class="tile">
+    <b>${esc(c.name)}</b> ${c.approved ? '<span class="chip">đã duyệt</span>' : ""}
+    <textarea rows="4" data-char-prompt="${c.id}">${esc(c.prompt)}</textarea>
+    <div class="row"><button data-act="save-char-prompt" data-id="${c.id}">Lưu prompt</button></div>
+    ${shown && shown.status === "done" && shown.file ? `<img src="/files/${shown.file}?t=${shown.id}">` : (busy ? '<p><span class="spin"></span>Đang tạo ảnh…</p>' : "<p class=\"hint\" style=\"margin:6px 0\">Chưa có ảnh.</p>")}
+    ${j && j.status === "failed" ? `<div class="err">${esc(j.error)}</div>` : ""}
+    <div class="row">
+      ${itemBtn("char_gen", c.id, shown ? "Làm lại" : "Gen ảnh", true, busy)}
+      <label style="font-size:12.5px"><input type="checkbox" data-act="approve-char" data-id="${c.id}" ${c.approved ? "checked" : ""} ${!shown || shown.status !== "done" ? "disabled" : ""}> Duyệt</label>
+    </div>
+    <div class="row"><label class="fld" style="flex:1">Hoặc tải ảnh của tôi lên thay thế<input type="file" accept="image/*" data-char-upload="${c.id}"></label></div>
+  </div>`;
+}
+
+function secStep1() {
+  const cpj = lastJob("char_prompt", "all");
+  return `<section class="card"><h1>Bước 1 — Nhân vật</h1>
+    <p class="hint">Dán hồ sơ nhân vật (nhiều nhân vật cũng được) và prompt mẫu ảnh nhân vật của bạn. GPT sẽ tách từng
+    nhân vật và viết 1 prompt ảnh tiếng Anh cho từng người (nền trắng đơn), đúng theo mẫu.</p>
+    <label class="fld">Hồ sơ nhân vật<textarea id="profiles" rows="6">${esc(S.profiles_raw)}</textarea></label>
+    <div class="row"><button data-act="save-profiles">Lưu hồ sơ</button></div>
+    <label class="fld">Prompt mẫu ảnh nhân vật (tiếng Anh, tuỳ chọn)<textarea id="charTpl" rows="4">${esc(S.char_tpl)}</textarea></label>
+    <div class="row"><button data-act="save-char-tpl">Lưu prompt mẫu</button>
+      ${itemBtn("char_prompt", "all", "Viết prompt ảnh", false, cpj && ACTIVE.includes(cpj.status))}
+      ${cpj && ACTIVE.includes(cpj.status) ? '<span class="spin"></span>Đang viết…' : ""}</div>
+    ${cpj && cpj.status === "failed" ? `<div class="err">${esc(cpj.error)}</div>` : ""}
+    <div class="row">${itemBtn("char_gen", null, "Gen ảnh tất cả nhân vật chưa có ảnh", false, false)}</div>
+    <div class="grid">${S.char_order.map(cid => charTile(S.chars[cid])).join("")}</div>
+  </section>`;
+}
+
+function batchTile(b, idx) {
+  const genJs = jobs("video_gen", b.id);
+  const busy = genJs.some(j => ACTIVE.includes(j.status));
+  const done = genJs.filter(j => j.status === "done");
+  const shown = done[done.length - 1];
+  const failedLast = genJs[genJs.length - 1];
+  return `<div class="tile" style="grid-column: span 2; min-width:280px">
+    <b>${esc(b.id)}</b> <span class="chip">${b.duration}s</span> <span class="chip">${esc(b.location || "—")}</span>
+    <span class="chip">${(b.characters || []).map(esc).join(", ") || "không có nhân vật"}</span>
+    ${b.dialogue_note ? `<div class="warn">⚠ ${esc(b.dialogue_note)}</div>` : ""}
+    <label class="fld">Prompt video<textarea rows="5" data-batch-prompt="${b.id}">${esc(b.prompt)}</textarea></label>
+    <div class="row"><button data-act="save-batch-prompt" data-id="${b.id}">Lưu prompt</button>
+      ${itemBtn("batch_prompt", b.id, "Viết lại prompt (GPT)", true, false)}</div>
+    <label class="fld">Model video
+      <select data-act="batch-model" data-id="${b.id}">${S.video_models.map(m => `<option value="${m.id}" ${b.model === m.id ? "selected" : ""}>${esc(m.label)} ($${m.price}/s)</option>`).join("")}</select>
+    </label>
+    ${shown && shown.file ? `<video src="/files/${shown.file}?t=${shown.id}" controls></video>` : (busy ? '<p><span class="spin"></span>Đang sinh video…</p>' : "")}
+    ${failedLast && failedLast.status === "failed" ? `<div class="err">${esc(failedLast.error)}</div>` : ""}
+    <div class="row">
+      ${itemBtn("video_gen", b.id, done.length ? "Gen lại" : "Gen video", true, busy || done.length >= S.max_gens_per_batch)}
+      <span class="hint">${done.length}/${S.max_gens_per_batch} lần</span>
+    </div>
+  </div>`;
+}
+
+function secStep2() {
+  const gj = lastJob("group", "ep");
+  return `<section class="card"><h1>Bước 2 — Prompt video</h1>
+    <p class="hint">Dán nguyên văn shot list tập 1 và prompt mẫu video (cấu trúc + ví dụ). GPT sẽ gom shot liên tiếp
+    cùng bối cảnh thành batch (tối đa 30s, không cắt ngang thoại, kiểm tra thoại 2.3 từ/giây), rồi viết 1 prompt cho
+    mỗi batch theo đúng mẫu, tự trích dẫn @Image1, @Image2… cho nhân vật đã duyệt ảnh ở bước 1.</p>
+    <label class="fld">Shot list tập 1<textarea id="shotlist" rows="8">${esc(S.shotlist_raw)}</textarea></label>
+    <div class="row"><button data-act="save-shotlist">Lưu shot list</button></div>
+    <label class="fld">Prompt mẫu video (tiếng Anh, tuỳ chọn)<textarea id="videoTpl" rows="5">${esc(S.video_tpl)}</textarea></label>
+    <div class="row"><button data-act="save-video-tpl">Lưu prompt mẫu</button>
+      ${itemBtn("group", "ep", "Chia batch + viết prompt", true, gj && ACTIVE.includes(gj.status))}
+      ${gj && ACTIVE.includes(gj.status) ? '<span class="spin"></span>Đang xử lý…' : ""}</div>
+    ${gj && gj.status === "failed" ? `<div class="err">${esc(gj.error)}</div>` : ""}
+    <div class="grid">${S.batches.map((b, i) => batchTile(b, i)).join("")}</div>
+  </section>`;
+}
+
+function secStep3() {
+  return `<section class="card"><h1>Bước 3 — Video</h1>
+    <p class="hint">Mỗi batch chọn model ở khung bước 2 (mặc định Seedance 2.5, có Seedance 2.0), 720p, khổ 9:16.
+    Tối đa ${S.max_gens_per_batch} lần tạo đầy đủ mỗi batch. Video xem ngay bên dưới, file lưu trong thư mục
+    <code>tap1/output</code>, đặt tên The_Alpha_EP01_B01_v1.mp4…</p>
+    <div class="row">${itemBtn("video_gen", null, "Gen tất cả batch chưa có video", false, false)}</div>
+  </section>`;
+}
+
+function renderAll() {
+  $("#main").innerHTML = secStep1() + secStep2() + secStep3();
+}
+
+async function refresh() {
+  if (fatal) return;
+  try {
+    S = await api("/api/state");
+  } catch (e) { return; }
+  if (fatal) return;
+  $("#offline").hidden = true;
+  renderHeader();
+  renderAll();
+}
+
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const d = el.dataset;
+  try {
+    switch (d.act) {
+      case "run": await runStage(d.stage, d.target || null, !!d.redo); break;
+      case "save-profiles": { const r = await api("/api/profiles", { text: $("#profiles").value }); if (r.error) toast(r.error, true); else toast("Đã lưu"); break; }
+      case "save-char-tpl": { const r = await api("/api/char_tpl", { text: $("#charTpl").value }); if (r.error) toast(r.error, true); else toast("Đã lưu"); break; }
+      case "save-shotlist": { const r = await api("/api/shotlist", { text: $("#shotlist").value }); if (r.error) toast(r.error, true); else toast("Đã lưu"); break; }
+      case "save-video-tpl": { const r = await api("/api/video_tpl", { text: $("#videoTpl").value }); if (r.error) toast(r.error, true); else toast("Đã lưu"); break; }
+      case "save-char-prompt": { const ta = document.querySelector(`textarea[data-char-prompt="${d.id}"]`);
+        const r = await api("/api/char/prompt", { id: d.id, text: ta.value }); if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(); break; }
+      case "save-batch-prompt": { const ta = document.querySelector(`textarea[data-batch-prompt="${d.id}"]`);
+        const r = await api("/api/batch/prompt", { id: d.id, text: ta.value }); if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(); break; }
+    }
+  } catch (err) { toast("Lỗi: " + err.message, true); }
+  await refresh();
+});
+document.addEventListener("change", async e => {
+  const el = e.target, d = el.dataset;
+  try {
+    if (d.act === "approve-char") { const r = await api("/api/char/approve", { id: d.id, approved: el.checked }); if (r.error) { toast(r.error, true); el.checked = !el.checked; } }
+    else if (d.act === "batch-model") { await api("/api/batch/model", { id: d.id, model: el.value }); }
+    else if (el.dataset.charUpload) {
+      const cid = el.dataset.charUpload, file = el.files[0]; if (!file) return;
+      const ext = "." + (file.name.split(".").pop() || "jpg").toLowerCase();
+      const q = new URLSearchParams({ char: cid, ext });
+      const r = await fetch("/api/char/upload_image?" + q.toString(), { method: "POST", headers: { "X-Tap1-Token": TOKEN }, body: file });
+      const j = await r.json(); if (j.error) toast(j.error, true);
+    } else return;
+    await refresh();
+  } catch (err) { toast("Lỗi: " + err.message, true); }
+});
+
+refresh();
+setInterval(() => { if (!fatal) refresh(); }, 1800);
+</script>
+</body>
+</html>

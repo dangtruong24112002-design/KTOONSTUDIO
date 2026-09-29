@@ -1,0 +1,47 @@
+TAP1 — BẢN TỐI GIẢN (yêu cầu #8): 1 trang, 3 bước, dự án "The Alpha", đúng 1 tập
+==============================================================================
+Đây KHÔNG phải tap_thu_v2 — là 1 app riêng, đơn giản hơn nhiều, chỉ làm đúng 3 việc: ảnh nhân
+vật -> prompt + sinh video cho 1 tập duy nhất. tap_thu_v2 vẫn còn nguyên, không bị đụng tới.
+
+BƯỚC 1 — Dán key (chỉ cần làm 1 lần)
+  Mở file tap1\keys.txt bằng Notepad (nếu chưa có, mở app ở bước 2 một lần thì app tự tạo file
+  trống ở thư mục nhà máy, ví dụ C:\Users\<tên>\.ktoon\keys.txt — dán key vào đó cũng được, app tự
+  đọc). Dán key WaveSpeed vào sau WAVESPEED_API_KEY=, key Atlas Cloud vào sau ATLASCLOUD_API_KEY=,
+  sửa BUDGET_USD= nếu muốn đổi trần chi (mặc định 18). Lưu lại.
+  Nếu bạn đã dùng tap_thu_v2 và lưu key qua mục Cài đặt ở đó rồi thì KHÔNG cần dán lại — tap1 đọc
+  chung file C:\Users\<tên>\.ktoon\keys.txt.
+
+BƯỚC 2 — Mở app
+  Windows: bấm đúp chay_tap1.bat trong thư mục tap1
+  Trình duyệt tự mở trang (cổng gần 8891, hoặc cổng gần đó nếu đang bận). Giữ cửa sổ đen mở trong
+  lúc dùng — đóng nó là tắt app; việc đang gửi sẽ tiếp tục khi mở lại (không tốn tiền lại).
+
+BƯỚC 3 — Làm theo đúng 3 bước trên trang
+  1 Nhân vật: dán hồ sơ nhân vật (nhiều người cũng được) + prompt mẫu ảnh nhân vật của bạn, bấm
+    "Viết prompt ảnh" (GPT tách từng người, viết prompt tiếng Anh theo đúng mẫu). Sửa tay được.
+    Bấm "Gen ảnh" cho từng người (hoặc "Gen ảnh tất cả"), ảnh nền trắng đơn, không có ảnh tham
+    chiếu đầu vào. Không ưng thì "Làm lại", hoặc tải ảnh của bạn lên thay thế. Tick "Duyệt" cho
+    nhân vật nào sẽ dùng trong video — chưa duyệt thì không được trích dẫn @ImageN ở bước 2.
+  2 Prompt video: dán nguyên văn shot list tập 1 + prompt mẫu video (cấu trúc + ví dụ), bấm "Chia
+    batch + viết prompt". GPT gom shot liên tiếp cùng bối cảnh thành batch (tối đa 30 giây, không
+    cắt ngang lời thoại), viết 1 prompt cho mỗi batch, tự ghi @Image1, @Image2… cho nhân vật đã
+    duyệt có mặt trong batch. Batch nào thoại dài hơn thời lượng thì có dòng cảnh báo màu vàng —
+    app không tự cắt thoại, bạn tự sửa lại prompt hoặc thời lượng nếu cần.
+  3 Video: mỗi batch chọn model ngay trong khung bước 2 (mặc định Seedance 2.5, có 2.0), 720p, khổ
+    9:16. Bấm "Gen tất cả" — app hiện tổng tiền ước tính, bấm xác nhận mới chạy thật. Xem video
+    ngay trên trang; file lưu ở tap1\output, tên The_Alpha_EP01_B01_v1.mp4… "Gen lại" tối đa 2 lần
+    mỗi batch, hết lượt thì phải sửa tay.
+
+CHI PHÍ
+  Trần mặc định $18 (BUDGET_USD trong keys.txt). Thanh trên cùng luôn hiện đã chi bao nhiêu và số
+  dư cả 2 tài khoản. Chi tiết từng lần gọi: tap1\output\so_chi.csv — Nhật ký: tap1\output\nhat_ky.txt
+
+KHI CÓ LỖI
+  Lỗi hiện ngay dưới nút liên quan, viết dễ hiểu — hết tiền báo "hết tiền", key sai báo "từ chối
+  key", không lẫn lộn. Đóng app giữa chừng cũng không sao: mở lại là việc đang gửi (ảnh/video) tự
+  hỏi tiếp, không bị tính tiền lại; việc đang chờ GPT trả lời khi tắt app thì mất, bấm chạy lại.
+
+GIÁ CHƯA XÁC NHẬN Ở LẦN CHẠY KEY THẬT ĐẦU TIÊN
+  Giá Seedream text-to-image (bản KHÔNG kèm ảnh tham chiếu) hiện dùng tạm giá bản /edit đã biết
+  ($0.0405/ảnh) — cần xác nhận lại trên trang giá WaveSpeed. Giá Seedance 2.5/2.0 dùng đúng giá đã
+  đo thật ở tap_thu_v2 ($0.134/s và $0.09/s).

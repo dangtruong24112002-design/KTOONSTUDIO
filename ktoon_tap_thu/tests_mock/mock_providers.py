@@ -84,6 +84,29 @@ CONDENSED_TEXT = ("- Always shoot vertical 9:16, photoreal, cinematic color grad
 SHEET_WHITE_BG_TEXT = ("Photoreal 21:9 character sheet, 4 full-body views + 4 face views, solid pure white "
                        "background as required by the owner override, identity and outfit locked from the "
                        "reference. No text, no watermark.")
+# ---------------------------------------------------------------- tap1 canned LLM outputs (yêu cầu #8)
+TAP1_CHAR_JSON = json.dumps({"characters": [
+    {"name": "Alpha", "prompt": "Photoreal portrait of a muscular alpha werewolf leader in human form, dark "
+     "hair, intense amber eyes, solid plain white background, one person only, 9:16, no text, no watermark."},
+    {"name": "Bride", "prompt": "Photoreal portrait of a young woman with long brown hair, determined "
+     "expression, solid plain white background, one person only, 9:16, no text, no watermark."},
+]})
+TAP1_GROUP_JSON = json.dumps({"batches": [
+    {"duration": 4, "location": "Moon Hall", "characters": ["Alpha"],
+     "shots_text": "SHOT 1: Alpha strides into the great hall, eyes locked on the door.",
+     "dialogue_text": "I have been waiting for this moment for a very long time.",
+     "dialogue_ok": True, "dialogue_note": ""},
+    {"duration": 20, "location": "Moon Hall", "characters": ["Alpha", "Bride"],
+     "shots_text": "SHOT 2: The Bride enters, Alpha turns to face her.\nSHOT 3: They stare each other down.",
+     "dialogue_text": "You should not have come here tonight. Turn back while you still can.",
+     "dialogue_ok": True, "dialogue_note": ""},
+]})
+TAP1_VIDEO_PROMPT_TEXT = ("[Creatives Description] Alpha confronts his human bride in the ancient Moon Hall.\n"
+    "Based on the uploaded references, strictly maintain the face and features of @Image1 for Alpha.\n"
+    "[Plot per timestamp] [0-4s] Alpha strides forward, eyes locked on the door. [4-20s] the Bride enters, "
+    "tense standoff.\n[Global supplement] torch-lit stone hall, low amber lighting, handheld camera.\n"
+    "Prohibited: no subtitles, no BGM, no extra dialogue, no AI-feel artifacts.")
+
 SHOTLIST_MD_TEXT = """# SEQUENCE 1: Alpha doi mat
 ## SHOT 01: Can canh Alpha
 Duration: 2s
@@ -271,6 +294,18 @@ class H(BaseHTTPRequestHandler):
             elif "librarian for an AI video-production knowledge base" in sysmsg:
                 # kb_classify (spec §20 item 1): only reached for a section the keyword table missed.
                 content = json.dumps({"assign": [{"idx": 0, "slots": ["shotlist_rules"]}]})
+            elif "freeform character profiles" in sysmsg:
+                content = TAP1_CHAR_JSON
+            elif "Group the shots into video-" in sysmsg:
+                content = TAP1_GROUP_JSON
+            elif "You are given the exact @ImageN" in sysmsg:
+                # tap1 batch_prompt: echo the app-computed reference mapping back into the canned prompt,
+                # so tests can verify the app cited the right @ImageN for the right character itself,
+                # rather than trusting a fully static response.
+                content = TAP1_VIDEO_PROMPT_TEXT
+                if "Reference mapping" in usermsg:
+                    mapping = usermsg.split("Reference mapping", 1)[1].split(":", 1)[1].split("\n\nShots", 1)[0].strip()
+                    content += "\n[echo for test] Reference mapping used: " + mapping.replace("\n", " | ")
             else:
                 content = plan_json()
             with LOCK:
