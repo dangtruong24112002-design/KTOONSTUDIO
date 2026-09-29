@@ -634,7 +634,9 @@ function secEpExport(eid, force) {
 function secEpisodesAll(force) {
   updateSec($("#main"), "episodes-head", [S.episodes_order], () => `<section class="card" id="sec-episodes"><div class="row between"><h1>Các tập</h1>
       <div class="row"><input id="newEpName" placeholder="tên tập mới (tuỳ chọn)" style="width:180px"><button data-act="new-episode">+ Tập trống</button></div></div>
-      <p class="hint">Tool tự tách kịch bản ở mục 1 thành các tập bên dưới. Mỗi tập tự có shot list, batch, prompt, gen &amp; QC, sửa đoạn hỏng và xuất riêng.</p></section>`, force);
+      <p class="hint">Tool tự tách kịch bản ở mục 1 thành các tập bên dưới. Mỗi tập tự có shot list, chia batch, viết prompt,
+      <b>Gen video &amp; QC</b>, sửa đoạn hỏng và xuất riêng — các phần này chỉ hiện ra bên dưới đây sau khi có ít nhất 1 tập.</p>
+      ${S.episodes_order.length ? "" : '<div class="warnbox">Chưa có tập nào nên chưa thấy phần Gen video ở đâu cả — quay lên mục 1 dán kịch bản rồi bấm "Tách thành các tập (GPT)", hoặc bấm "+ Tập trống" ở trên để tự tạo 1 tập rồi thêm shot tay.</div>'}</section>`, force);
   (S.episodes_order || []).forEach(eid => secEpisode(eid, force));
 }
 function secCost(force) {
