@@ -19,6 +19,11 @@ keys.txt
 .pytest_cache/
 # mock media used by the offline tests may be pushed
 !ktoon_tap_thu/tests_mock/files/*
+# self-updater runtime state (yêu cầu #6) — never part of the repo
+tap_thu_v2/.version.json
+tap_thu_v2/.update_backup/
+**/.update_backup/
+
 # throwaway copies/logs made by run_env*.sh + e2e screenshots
 ktoon_tap_thu/tests_mock/run_v1/
 ktoon_tap_thu/tests_mock/run_v2/

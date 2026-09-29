@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 import pipeline as P
+import updater
 from pipeline import HERE, OUT, STATE, KEYS, LOCK, RUNNING
 
 TOKEN = __import__("os").environ.get("KTOON_TEST_TOKEN") or secrets.token_urlsafe(18)
@@ -115,7 +116,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/state":
                 if self.headers.get("X-Tapthu-Token") != TOKEN:
                     return self._send(403, {"error": "token"})
-                return self._send(200, P.public_state())
+                state = P.public_state()
+                state["update"] = updater.status()
+                state["github_repo"] = updater.github_repo()
+                state["github_token_preview"] = P.mask_key(KEYS.get("GITHUB_TOKEN"))
+                return self._send(200, state)
             if path.startswith("/files/"):
                 rel = path[len("/files/"):]
                 target = (P.DATA_DIR / rel).resolve()
@@ -227,6 +232,10 @@ class Handler(BaseHTTPRequestHandler):
                 updates[P.KEY_OF["atlas"]] = str(d["atlas"]).strip()
             if "data_dir" in d and str(d["data_dir"]).strip():
                 updates["DATA_DIR"] = str(d["data_dir"]).strip()
+            if "github_token" in d and str(d["github_token"]).strip():
+                updates["GITHUB_TOKEN"] = str(d["github_token"]).strip()
+            if "github_repo" in d and str(d["github_repo"]).strip():
+                updates["GITHUB_REPO"] = str(d["github_repo"]).strip()
             if not updates:
                 return {"error": "Chưa nhập gì để lưu."}
             P.save_home_keys(updates)
@@ -234,6 +243,9 @@ class Handler(BaseHTTPRequestHandler):
             KEYS.update(P.load_keys())
             threading.Thread(target=P.refresh_balances, daemon=True).start()
             return {"ok": True, "note": "DATA_DIR" in updates and "Đổi thư mục dữ liệu cần khởi động lại app để áp dụng." or ""}
+        if path == "/api/update/check_now":
+            threading.Thread(target=lambda: updater.check_and_apply(PORT[0], force=True), daemon=True).start()
+            return {"ok": True}
         if path == "/api/balance":
             P.refresh_balances(reset_start=bool(d.get("reset_start")))
             return {"ok": True}
@@ -458,6 +470,7 @@ def main():
         threading.Thread(target=P.run_job, args=(jid,), daemon=True).start()
     threading.Thread(target=P.scheduler, daemon=True).start()
     threading.Thread(target=P.refresh_balances, daemon=True).start()
+    updater.start_poller(PORT[0])
     url = f"http://127.0.0.1:{PORT[0]}/"
     have = ", ".join(P.PROVIDER_NAME[p] for p, k in P.KEY_OF.items() if KEYS.get(k)) or "chưa có key nào"
     P.log(f"Tập thử v2 · key: {have} · trần ${P.budget():.2f}")

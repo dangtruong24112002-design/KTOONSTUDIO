@@ -37,3 +37,11 @@
   app). Từ nay commit/push thẳng lên main khi test API giả pass, không mở PR nữa. Test bằng API giả, đã
   chạy checks_v2.py + e2e_v2.py pass (script test cũng cập nhật để dữ liệu test nằm gọn trong thư mục
   test, không lẫn vào thư mục dữ liệu thật).
+- 2026-09-29 Tự cập nhật code từ GitHub cho `tap_thu_v2` (docs/SPEC_TAP_THU_V2.md §18, yêu cầu #6): app tự
+  hỏi GitHub mỗi 2 phút, có commit mới trên main thì tự tải, thay đúng 5 file code (không đụng key/dữ
+  liệu), mở tiến trình mới ở cổng kế tiếp, đợi tiến trình mới chạy được rồi mới tắt tiến trình cũ — tiến
+  trình đang chạy không bao giờ bị gián đoạn bởi 1 bản cập nhật lỗi (bản lỗi tự quay lại bản cũ, báo trên
+  giao diện). Thêm ô GitHub token (chỉ đọc) + tên repo trong Cài đặt (lưu như key, chỉ hiện 4 số cuối),
+  dải nhỏ hiện phiên bản đang chạy, nút "Kiểm tra cập nhật ngay", và trang tự chuyển/tự tải lại khi có bản
+  mới (trừ khi đang gõ dở). Test bằng GitHub API giả mới thêm vào mock_providers.py
+  (`ktoon_tap_thu/tests_mock/update_check.py`) — cả đường thành công lẫn đường rollback đều pass ổn định.

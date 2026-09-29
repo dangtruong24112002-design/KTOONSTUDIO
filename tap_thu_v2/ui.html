@@ -123,7 +123,13 @@ async function api(path, body) {
   const opt = {headers: {"X-Tapthu-Token": TOKEN}};
   if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);
-  if (r.status === 403) { fatal = true; $("#offline").hidden = false; $("#offline").textContent = "Phiên cũ đã hết hiệu lực (app vừa mở lại). Tải lại trang này (F5)."; throw new Error("token"); }
+  if (r.status === 403) {
+    fatal = true;
+    $("#offline").hidden = false;
+    $("#offline").textContent = "Có bản mới hoặc app vừa mở lại — bấm F5 (tự tải lại nếu không đang gõ dở).";
+    if (Object.keys(dirty).length === 0) setTimeout(() => location.reload(), 2000);
+    throw new Error("token");
+  }
   return r.json();
 }
 let fatal = false;
@@ -222,10 +228,13 @@ function renderHeader() {
   const m = S.money, b = S.budget, pct = Math.min(100, (m.spent + m.reserved) / b * 100);
   const runN = S.jobs.filter(j => ACTIVE.includes(j.status)).length;
   const keys = ["wavespeed", "atlas"].map(p => `${p === "atlas" ? "Atlas" : "WaveSpeed"}: ${S.keys[p] ? "có key" : "chưa có key"}`).join(" · ");
+  const ver = (S.update && S.update.version) || {};
+  const verStr = ver.sha ? `Phiên bản: ${esc(ver.sha.slice(0, 7))} · ${esc((ver.t || "").replace("T", " ").slice(0, 16))}` : "Phiên bản: chưa rõ";
   $("#meters").innerHTML =
     `<div class="meter"><div class="lbl">Đã chi</div><div class="val">${usd(m.spent, 2)} <small>/ trần ${usd(b, 2)}</small></div><div class="bar ${pct > 85 ? "hot" : ""}"><i style="width:${pct}%"></i></div></div>` +
     `<div class="meter"><div class="lbl">Đang chạy</div><div class="val">${runN ? '<span class="spin"></span>' : ""}${runN} việc</div></div>` +
     `<div class="meter"><span class="muted">${esc(keys)}</span></div>` +
+    `<div class="meter"><span class="muted">${esc(verStr)}</span></div>` +
     `<button data-act="reload-keys">Đọc lại keys.txt</button>`;
   const jumps = [["#sec-script", "Kịch bản"], ["#sec-list", "Danh sách"], ["#sec-templates", "Prompt mẫu"], ["#sec-reflib", "Kho ref"],
                  ["#sec-chars", "Nhân vật"], ["#sec-envs", "Bối cảnh"], ["#sec-props", "Prop"], ["#sec-settings", "Cài đặt"]]
@@ -661,8 +670,19 @@ function imgSelect(key, current) {
   return `<select data-act="save-setting" data-key="${key}">
     ${opts.map(m => `<option value="${esc(m.id)}" ${m.id === current ? "selected" : ""}>${esc(imgOptLabel(m))}</option>`).join("")}</select>`;
 }
+function updateBanner() {
+  const u = S.update || {};
+  if (u.state && u.state.rollback) {
+    const r = u.state.rollback;
+    return `<div class="warnbox">${esc(r.msg || "Bản mới lỗi, đã tự quay lại bản cũ.")}</div>`;
+  }
+  if (u.state && u.state.applied) {
+    return `<div class="warnbox">Đã cập nhật xong, đang chuyển qua bản mới… nếu trang không tự chuyển, bấm F5.</div>`;
+  }
+  return "";
+}
 function secSettings(force) {
-  updateSec($("#main"), "settings", [S.settings, S.model_catalog, S.key_preview, S.keys, S.data_dir], () => {
+  updateSec($("#main"), "settings", [S.settings, S.model_catalog, S.key_preview, S.keys, S.data_dir, S.update, S.github_repo, S.github_token_preview], () => {
     const st = S.settings;
     const writeModel = ((S.model_catalog && S.model_catalog.llm_write) || []).find(m => m.id === st.llm_write);
     const showThinking = writeModel && writeModel.thinking;
@@ -682,6 +702,17 @@ function secSettings(force) {
       Để dữ liệu ngoài thư mục cài app, cập nhật code sau này sẽ không đụng tới ảnh/video/chi phí đã có.</p>
       <div class="row"><input id="dataDirInput" placeholder="vd: C:\\Users\\ten\\KTOON_DATA" style="flex:2 1 260px">
         <button data-act="save-keys" data-datadir="1">Lưu thư mục dữ liệu</button></div>
+      <div class="stephead">Tự cập nhật code từ GitHub</div>
+      <p class="hint">App tự hỏi GitHub mỗi 2 phút xem có bản mới trên nhánh main không; có thì tự tải, thay file code
+      (không đụng key/dữ liệu), mở tiến trình mới rồi báo cho trang này chuyển qua. Bản mới lỗi thì tự quay lại bản cũ.
+      Token chỉ cần nếu repo ở trên là private (quyền đọc là đủ).</p>
+      <div class="row"><label style="flex:1 1 220px">GitHub token (chỉ đọc, để trống nếu repo public)
+        ${S.github_token_preview ? `<span class="chip">hiện tại: ${esc(S.github_token_preview)}</span>` : '<span class="muted">chưa có</span>'}
+        <input type="password" id="githubToken" placeholder="dán token mới…" autocomplete="off"></label>
+      <label style="flex:1 1 220px">Tên repo<input id="githubRepo" value="${esc(S.github_repo || "")}" placeholder="owner/KTOONSTUDIO"></label></div>
+      <div class="row"><button data-act="save-keys" data-github="1">Lưu GitHub</button>
+        <button data-act="check-update">Kiểm tra cập nhật ngay</button></div>
+      ${updateBanner()}
       <div class="stephead">Chọn model cho từng việc — giá hiện ngay cạnh tên</div>
       <p class="hint">Lưu theo series (dùng chung cho mọi tập). Giá lấy từ bảng owner cho biết 29/9 —
       sandbox chạy phiên này không vào được wavespeed.ai để tự kiểm tra lại, nên vẫn cần owner xác nhận lại ở lần chạy key thật đầu tiên.</p>
@@ -752,10 +783,22 @@ function renderAll(force) {
   secCost(force);
 }
 
+let redirecting = false;
 async function refresh(force) {
   if (fatal) return;
   try { S = await api("/api/state"); $("#offline").hidden = true; }
   catch (e) { if (!fatal) $("#offline").hidden = false; return; }
+  const applied = S.update && S.update.state && S.update.state.applied;
+  if (applied && applied.new_port && !redirecting) {
+    if (Object.keys(dirty).length === 0) {
+      redirecting = true;
+      toast("Đã có bản mới — đang chuyển sang…");
+      setTimeout(() => { location.href = "http://127.0.0.1:" + applied.new_port + "/"; }, 1500);
+    } else {
+      $("#offline").hidden = false;
+      $("#offline").textContent = "Đã có bản mới (cổng " + applied.new_port + ") — lưu xong rồi bấm F5, hoặc vào http://127.0.0.1:" + applied.new_port + "/";
+    }
+  }
   renderAll(force);
 }
 async function loop() { await refresh(); setTimeout(loop, S && active() ? 1500 : 4000); }
@@ -848,15 +891,23 @@ document.addEventListener("click", async e => {
         const r = await api("/api/settings", {settings: {model_prices: mp}}); delete dirty.settings;
         if (r.error) toast(r.error, true); else toast("Đã lưu giá model"); await refresh(); break; }
       case "save-keys": {
-        const body = d.datadir ? {data_dir: $("#dataDirInput").value} : {wavespeed: $("#keyWavespeed").value, atlas: $("#keyAtlas").value};
-        if (!d.datadir && !body.wavespeed && !body.atlas) { toast("Chưa dán key nào", true); break; }
+        const body = d.datadir ? {data_dir: $("#dataDirInput").value}
+          : d.github ? {github_token: $("#githubToken").value, github_repo: $("#githubRepo").value}
+          : {wavespeed: $("#keyWavespeed").value, atlas: $("#keyAtlas").value};
+        if (!d.datadir && !d.github && !body.wavespeed && !body.atlas) { toast("Chưa dán key nào", true); break; }
         if (d.datadir && !body.data_dir.trim()) { toast("Chưa nhập đường dẫn", true); break; }
+        if (d.github && !body.github_token.trim() && !body.github_repo.trim()) { toast("Chưa nhập gì", true); break; }
         const r = await api("/api/keys/save", body);
         delete dirty.settings;
         if ($("#keyWavespeed")) $("#keyWavespeed").value = "";
         if ($("#keyAtlas")) $("#keyAtlas").value = "";
+        if ($("#githubToken")) $("#githubToken").value = "";
         if (r.error) toast(r.error, true); else toast(r.note || "Đã lưu");
         await refresh(); break; }
+      case "check-update": {
+        const r = await api("/api/update/check_now", {});
+        if (r.error) toast(r.error, true); else toast("Đang kiểm tra cập nhật…");
+        break; }
     }
   } catch (err) { if (err.message !== "token") toast("Lỗi: " + err.message, true); }
 });

@@ -491,3 +491,41 @@ real-key run (§12).
 3. **Workflow going forward**: commits push straight to `main`, no PR — only after the mock-API test suite
    (`checks_v2.py` + `e2e_v2.py`) passes on a fresh run. Each push adds one Vietnamese line to
    `CHANGELOG.md` describing what changed.
+
+## 18. Addendum #6 (2026-09-29) — self-update from GitHub, owner just presses F5
+
+1. A "Tự cập nhật code từ GitHub" block in Cài đặt: a read-only GitHub token field (only needed for a
+   private repo) and a repo name field (default `<owner>/KTOONSTUDIO`), saved the same way and place as
+   the API keys (§17 item 1) — `GITHUB_TOKEN`/`GITHUB_REPO` in the keys file, token shown only as
+   `****<last 4>`, never logged or stored in `state.json`.
+2. Every 2 minutes (`tap_thu_v2/updater.py`, a background thread started from `app.py`'s `main()`) the app
+   calls `GET /repos/{repo}/commits/main`. A new commit sha triggers: download the zipball via `urllib`
+   (`GET /repos/{repo}/zipball/{sha}`, no git needed), back up the current `app.py`/`pipeline.py`/
+   `providers.py`/`updater.py`/`ui.html`, write the new ones over them — nothing else in `tap_thu_v2`,
+   never `keys.txt`, never anything under `DATA_DIR` (§17 item 2). It then spawns a brand-new process on
+   the next port and health-checks it for up to 20s. The **old process keeps serving throughout** — it
+   never closes its own socket until the new one has already proven itself healthy, so a bad zipball can
+   never take down a working app. A job mid-submission (`status == "running"` with no `pid` yet — the
+   same narrow window app.py's own restart-resume logic already treats specially) blocks a scheduled
+   check from applying; the "Kiểm tra cập nhật ngay" button (item 5) can override that and apply anyway.
+3. If the new process never answers within 20s: it's killed, the backed-up files are restored on disk,
+   and the old process — never interrupted — keeps running exactly as before. The failure is recorded and
+   surfaced on the page (item 4) as a warning banner naming the commit that failed and that the rollback
+   already happened; nothing further is needed from the owner.
+4. The header shows a small strip: "Phiên bản: `<7-char sha>` · `<committer time>`". Once a new process
+   has taken over on the next port, the *old* process's page (still open in the owner's browser) shows
+   "Đã có bản mới — đang chuyển sang…" and navigates to the new port after ~1.5s, unless the owner is mid-
+   edit somewhere (the existing per-section `dirty` tracking), in which case it shows the new URL instead
+   of auto-navigating over unsaved text. Once the old process actually exits, any tab still pointed at it
+   gets a 403 on its next poll — reusing the app's existing "phiên cũ hết hiệu lực, tải lại trang" handling
+   — which now also auto-reloads after 2s when nothing is unsaved.
+5. A "Kiểm tra cập nhật ngay" button (`/api/update/check_now`) runs the same check immediately in the
+   background rather than waiting for the next 2-minute tick.
+
+Tested against a fake GitHub API added to `ktoon_tap_thu/tests_mock/mock_providers.py`
+(`/github/repos/.../commits/main`, `/github/repos/.../zipball/...`, plus a `/github/_control` endpoint the
+test script uses to switch the mock between a good update, a broken one, and "nothing new"), in
+`ktoon_tap_thu/tests_mock/update_check.py` — covers the full apply-and-handoff path, the broken-update
+rollback path (verifying the serving process is never interrupted and no orphaned broken process is left
+listening), and that project data survives a real handoff between two live processes. Still never a real
+paid API call.

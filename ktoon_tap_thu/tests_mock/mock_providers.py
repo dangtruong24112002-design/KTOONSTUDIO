@@ -1,13 +1,20 @@
-"""Mock WaveSpeed (media + LLM + balance) and Atlas Cloud (video + balance) for offline tests of app.py."""
+"""Mock WaveSpeed (media + LLM + balance), Atlas Cloud (video + balance), and a fake GitHub API (commits +
+zipball, spec §18) for offline tests of app.py / updater.py."""
+import io
 import json
+import re
 import sys
 import threading
 import time
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PORT = int(sys.argv[1])
 HERE = Path(__file__).resolve().parent
+REAL_TAP_THU_V2 = HERE.parent.parent / "tap_thu_v2"
+GITHUB_MOCK = {"sha": "0000000initial000000000000000000000000", "date": "2026-09-29T00:00:00Z", "mode": "good"}
+UPDATER_CODE_FILES = ["app.py", "pipeline.py", "providers.py", "updater.py", "ui.html"]
 WS_KEY, AT_KEY = "Bearer test-ws-key-123456", "Bearer test-atlas-key-123456"
 BAL = {"ws": 50.0, "atlas": 30.0}
 ATLAS_PRICE = {"bytedance/seedance-2.5/image-to-video": 0.30, "bytedance/seedance-2.0/image-to-video": 0.112,
@@ -122,6 +129,24 @@ def plan_json():
                        "shots": shots})
 
 
+def _build_fake_zip(mode):
+    """A zipball shaped like GitHub's (top-level '<repo>-<sha>/' folder), containing a real, working
+    copy of the current tap_thu_v2 code — except in "broken" mode, where app.py is swapped for something
+    that fails to start, to exercise the updater's rollback path (spec §18 point 3)."""
+    buf = io.BytesIO()
+    root = "KTOONSTUDIO-fakesha/"
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in UPDATER_CODE_FILES:
+            src = REAL_TAP_THU_V2 / name
+            if name == "app.py" and mode == "broken":
+                z.writestr(root + "tap_thu_v2/" + name, "raise SystemExit('broken update, on purpose, for a test')\n")
+            elif name == "updater.py" and mode == "missing":
+                continue
+            elif src.exists():
+                z.writestr(root + "tap_thu_v2/" + name, src.read_bytes())
+    return buf.getvalue()
+
+
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -140,6 +165,10 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(n) if n else b""
         auth = self.headers.get("Authorization")
+        if self.path == "/github/_control":
+            body = json.loads(raw.decode() or "{}")
+            GITHUB_MOCK.update({k: v for k, v in body.items() if k in ("sha", "date", "mode")})
+            return self.send(200, {"ok": True, "github_mock": GITHUB_MOCK})
         if self.path in ("/ws/media/upload/binary", "/atlas/uploadMedia"):
             want = WS_KEY if self.path.startswith("/ws/") else AT_KEY
             with LOCK:
@@ -214,6 +243,12 @@ class H(BaseHTTPRequestHandler):
         self.send(404, {"error": "no route " + self.path})
 
     def do_GET(self):
+        m = re.match(r"^/github/repos/[^/]+/[^/]+/commits/main$", self.path)
+        if m:
+            return self.send(200, {"sha": GITHUB_MOCK["sha"], "commit": {"committer": {"date": GITHUB_MOCK["date"]}}})
+        m = re.match(r"^/github/repos/[^/]+/[^/]+/zipball/[^/]+$", self.path)
+        if m:
+            return self.send(200, raw=_build_fake_zip(GITHUB_MOCK["mode"]), ctype="application/octet-stream")
         if self.path.startswith("/files/"):
             f = HERE / "files" / self.path.split("/")[-1].split("?")[0]
             if f.exists():

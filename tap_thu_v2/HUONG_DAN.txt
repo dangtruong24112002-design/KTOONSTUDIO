@@ -23,6 +23,10 @@ BƯỚC 2 — Mở app
   Ảnh/video/state/chi phí lưu ở thư mục dữ liệu riêng (mặc định C:\Users\<tên>\KTOON_DATA, xem/đổi
   trong Cài đặt — đổi xong cần khởi động lại app), tách khỏi thư mục cài app để cập nhật app sau này
   không đụng tới dữ liệu đã có.
+  App tự hỏi GitHub mỗi 2 phút xem có bản mới không (mục "Tự cập nhật" trong Cài đặt), tự tải và tự
+  chuyển qua bản mới khi có — không cần làm gì. Thấy dòng "Đã có bản mới — bấm F5" hoặc trang tự tải
+  lại là bình thường. Nếu bản mới bị lỗi, app tự quay lại bản cũ và báo trên trang, không mất gì cả.
+  Muốn kiểm tra ngay không đợi 2 phút thì bấm "Kiểm tra cập nhật ngay" trong Cài đặt.
 
 BƯỚC 3 — Làm theo đúng thứ tự trên 1 trang (trang dài, cuộn xuống hoặc bấm hàng nút "nhảy nhanh"
          ngay dưới đầu trang để tới thẳng từng mục)
