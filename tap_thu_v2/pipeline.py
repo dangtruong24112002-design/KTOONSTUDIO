@@ -2513,7 +2513,7 @@ def finish_fail(jid, err, keep_cost=False):
         if not keep_cost:
             j["cost"] = 0.0
     save()
-    ledger(STATE["jobs"][jid], "lỗi: " + scrub(err)[:120], 0)
+    ledger(STATE["jobs"][jid], "lỗi: " + scrub(err)[:120], STATE["jobs"][jid].get("cost", 0) if keep_cost else 0)
     log(f"LỖI {jid}: {err}")
 
 
