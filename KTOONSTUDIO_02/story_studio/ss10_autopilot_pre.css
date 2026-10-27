@@ -1,0 +1,511 @@
+/* ===== Autopilot Pre-Production Styles (ss10_autopilot_pre.css) ===== */
+/* Theme Variables & Font inherited from #story */
+
+/* Header & Script Autopilot Trigger Buttons */
+#story #story-btn-autopilot-hdr {
+  background: linear-gradient(135deg, rgba(223, 177, 91, 0.22), rgba(31, 214, 165, 0.18));
+  border: 1px solid var(--gold, #dfb15b);
+  color: var(--gold, #dfb15b);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+#story #story-btn-autopilot-hdr:hover {
+  background: linear-gradient(135deg, rgba(223, 177, 91, 0.35), rgba(31, 214, 165, 0.28));
+  border-color: #ffd88a;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(223, 177, 91, 0.35);
+}
+
+#story #story-btn-autopilot-script {
+  background: linear-gradient(135deg, rgba(223, 177, 91, 0.18), rgba(31, 214, 165, 0.12));
+  border: 1px solid var(--gold, #dfb15b);
+  color: var(--gold, #dfb15b);
+  font-weight: 700;
+  font-size: 11.5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+#story #story-btn-autopilot-script:hover {
+  background: linear-gradient(135deg, rgba(223, 177, 91, 0.3), rgba(31, 214, 165, 0.2));
+  border-color: #ffd88a;
+  color: #fff;
+}
+
+/* Modal Overlay */
+#story .story-autopilot-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(8, 14, 14, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  animation: storyAutopilotFadeIn 0.2s ease;
+}
+
+@keyframes storyAutopilotFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal Box */
+#story .story-autopilot-modal {
+  background: var(--surface, #141f1f);
+  border: 1px solid var(--border, #233535);
+  border-radius: 8px;
+  width: 740px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 16px rgba(31, 214, 165, 0.12);
+  overflow: hidden;
+  animation: storyAutopilotScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes storyAutopilotScaleIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Modal Header */
+#story .story-autopilot-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, #233535);
+  background: var(--surface-high, #1c2b2b);
+}
+
+#story .story-autopilot-hdr-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#story .story-autopilot-title-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text, #e6f0ec);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+#story .story-autopilot-ep-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent, #1fd6a5);
+  background: rgba(31, 214, 165, 0.12);
+  border: 1px solid rgba(31, 214, 165, 0.3);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+#story .story-autopilot-cost-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold, #dfb15b);
+  background: rgba(223, 177, 91, 0.12);
+  border: 1px solid rgba(223, 177, 91, 0.3);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+#story .story-autopilot-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted, #93a39a);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+#story .story-autopilot-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Modal Body */
+#story .story-autopilot-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+/* Mode Switcher Tabs */
+#story .story-autopilot-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle, #192727);
+  padding-bottom: 10px;
+}
+
+#story .story-autopilot-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted, #93a39a);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+#story .story-autopilot-tab-btn:hover {
+  color: var(--text, #e6f0ec);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#story .story-autopilot-tab-btn.active {
+  color: var(--accent, #1fd6a5);
+  background: rgba(31, 214, 165, 0.12);
+  border-color: rgba(31, 214, 165, 0.35);
+}
+
+/* Options Bar */
+#story .story-autopilot-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(13, 20, 20, 0.5);
+  border: 1px solid var(--border-subtle, #192727);
+  border-radius: 6px;
+  font-size: 11.5px;
+}
+
+#story .story-autopilot-check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted, #93a39a);
+  cursor: pointer;
+  user-select: none;
+}
+
+#story .story-autopilot-check-label input[type="checkbox"] {
+  accent-color: var(--accent, #1fd6a5);
+  cursor: pointer;
+}
+
+#story .story-autopilot-meta-text {
+  color: var(--muted, #93a39a);
+  font-size: 11px;
+}
+
+/* Queue Range Box */
+#story .story-autopilot-queue-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(13, 20, 20, 0.7);
+  border: 1px solid var(--border, #233535);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+#story .story-autopilot-select {
+  background: var(--surface-high, #1c2b2b);
+  border: 1px solid var(--border, #233535);
+  color: var(--text, #e6f0ec);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  outline: none;
+}
+
+#story .story-autopilot-select:focus {
+  border-color: var(--accent, #1fd6a5);
+}
+
+/* Pipeline Step Cards */
+#story .story-autopilot-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#story .story-autopilot-step-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(28, 43, 43, 0.4);
+  border: 1px solid var(--border-subtle, #192727);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+#story .story-autopilot-step-card.waiting {
+  opacity: 0.65;
+}
+
+#story .story-autopilot-step-card.running {
+  background: rgba(31, 214, 165, 0.08);
+  border-color: var(--accent, #1fd6a5);
+  box-shadow: 0 0 10px rgba(31, 214, 165, 0.15);
+  opacity: 1;
+}
+
+#story .story-autopilot-step-card.done {
+  background: rgba(31, 214, 165, 0.04);
+  border-color: rgba(31, 214, 165, 0.3);
+  opacity: 1;
+}
+
+#story .story-autopilot-step-card.skipped {
+  background: rgba(147, 163, 154, 0.04);
+  border-color: rgba(147, 163, 154, 0.2);
+  opacity: 0.7;
+}
+
+#story .story-autopilot-step-card.failed {
+  background: rgba(224, 82, 82, 0.08);
+  border-color: var(--danger, #e05252);
+  opacity: 1;
+}
+
+#story .story-autopilot-step-card.gate_wait {
+  background: rgba(229, 169, 59, 0.08);
+  border-color: var(--warning, #e5a93b);
+  opacity: 1;
+}
+
+/* Step Info Left */
+#story .story-autopilot-step-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+#story .story-autopilot-step-num {
+  font-size: 11px;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-high, #1c2b2b);
+  color: var(--muted, #93a39a);
+  border: 1px solid var(--border, #233535);
+  flex-shrink: 0;
+}
+
+#story .story-autopilot-step-card.running .story-autopilot-step-num {
+  background: var(--accent, #1fd6a5);
+  color: #080e0e;
+  border-color: var(--accent, #1fd6a5);
+  animation: storyPulseGlow 1.4s infinite;
+}
+
+@keyframes storyPulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(31, 214, 165, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(31, 214, 165, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(31, 214, 165, 0); }
+}
+
+#story .story-autopilot-step-card.done .story-autopilot-step-num {
+  background: rgba(31, 214, 165, 0.2);
+  color: var(--accent, #1fd6a5);
+  border-color: var(--accent, #1fd6a5);
+}
+
+#story .story-autopilot-step-card.failed .story-autopilot-step-num {
+  background: rgba(224, 82, 82, 0.2);
+  color: var(--danger, #e05252);
+  border-color: var(--danger, #e05252);
+}
+
+#story .story-autopilot-step-card.gate_wait .story-autopilot-step-num {
+  background: rgba(229, 169, 59, 0.2);
+  color: var(--warning, #e5a93b);
+  border-color: var(--warning, #e5a93b);
+}
+
+#story .story-autopilot-step-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#story .story-autopilot-step-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text, #e6f0ec);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#story .story-autopilot-role-pill {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted, #93a39a);
+}
+
+#story .story-autopilot-step-desc {
+  font-size: 11px;
+  color: var(--muted, #93a39a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Step Right Controls & Status */
+#story .story-autopilot-step-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+#story .story-autopilot-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+#story .story-autopilot-badge.waiting {
+  color: var(--muted, #93a39a);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#story .story-autopilot-badge.running {
+  color: var(--accent, #1fd6a5);
+  background: rgba(31, 214, 165, 0.15);
+  border: 1px solid rgba(31, 214, 165, 0.3);
+}
+
+#story .story-autopilot-badge.done {
+  color: #1fd6a5;
+  background: rgba(31, 214, 165, 0.15);
+}
+
+#story .story-autopilot-badge.skipped {
+  color: var(--muted, #93a39a);
+  background: rgba(147, 163, 154, 0.12);
+}
+
+#story .story-autopilot-badge.failed {
+  color: var(--danger, #e05252);
+  background: rgba(224, 82, 82, 0.15);
+  border: 1px solid rgba(224, 82, 82, 0.3);
+}
+
+#story .story-autopilot-badge.gate_wait {
+  color: var(--warning, #e5a93b);
+  background: rgba(229, 169, 59, 0.15);
+  border: 1px solid rgba(229, 169, 59, 0.3);
+}
+
+/* Gate A Alert Box */
+#story .story-autopilot-gate-box {
+  padding: 12px 14px;
+  background: rgba(229, 169, 59, 0.08);
+  border: 1px solid rgba(229, 169, 59, 0.3);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--text, #e6f0ec);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#story .story-autopilot-gate-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  color: var(--warning, #e5a93b);
+}
+
+#story .story-autopilot-gate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted, #93a39a);
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* Modal Footer */
+#story .story-autopilot-ftr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border, #233535);
+  background: var(--surface-high, #1c2b2b);
+}
+
+#story .story-autopilot-ftr-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--muted, #93a39a);
+}
+
+#story .story-autopilot-ftr-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Queue Progress Banner */
+#story .story-autopilot-queue-banner {
+  padding: 8px 12px;
+  background: rgba(31, 214, 165, 0.1);
+  border: 1px solid rgba(31, 214, 165, 0.25);
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: var(--accent, #1fd6a5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

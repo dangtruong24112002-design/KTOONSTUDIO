@@ -1,0 +1,482 @@
+/* story_studio/ss11_autopilot_prod.css
+   Autopilot Production (S4–S8) UI Styles
+   Strictly scoped under #story — KTOONS Theme — Montserrat Typography — No Icons/Emojis
+*/
+
+#story .story-btn-autopilot-prod {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #134e4a 0%, #064e3b 100%);
+  color: #fef08a;
+  border: 1px solid #ca8a04;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+#story .story-btn-autopilot-prod:hover {
+  background: linear-gradient(135deg, #0f766e 0%, #065f46 100%);
+  border-color: #eab308;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.25);
+}
+
+#story .story-btn-autopilot-prod.running {
+  background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+  border-color: #22c55e;
+  color: #86efac;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+}
+
+/* Floating Running Pill (when modal is closed during execution) */
+#story #story-autopilot-floating-pill {
+  position: fixed;
+  bottom: 34px;
+  right: 20px;
+  background: rgba(13, 26, 21, 0.95);
+  border: 1px solid #ca8a04;
+  border-radius: 6px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  z-index: 85;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+#story #story-autopilot-floating-pill:hover {
+  transform: translateY(-2px);
+  border-color: #eab308;
+}
+
+#story .pill-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+#story .pill-text {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fef08a;
+}
+
+#story .pill-sub {
+  font-size: 10px;
+  color: var(--muted, #93a39a);
+}
+
+/* Autopilot Modal Dialog */
+#story .story-autopilot-modal-box {
+  width: 720px;
+  max-width: 95vw;
+  max-height: 90vh;
+  background: var(--card, #070e0b);
+  border: 1px solid var(--line, #1d3128);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+}
+
+/* Modal Header */
+#story .story-autopilot-header {
+  padding: 12px 16px;
+  background: var(--card2, #0d1a15);
+  border-bottom: 1px solid var(--line, #1d3128);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#story .story-autopilot-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text, #e6f0ea);
+  letter-spacing: 0.2px;
+}
+
+#story .story-autopilot-ep-tag {
+  font-size: 11px;
+  color: #ca8a04;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+#story .story-autopilot-status-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#story .status-idle {
+  background: rgba(147, 163, 154, 0.15);
+  color: var(--muted, #93a39a);
+  border: 1px solid rgba(147, 163, 154, 0.3);
+}
+
+#story .status-awaiting {
+  background: rgba(202, 138, 4, 0.2);
+  color: #fef08a;
+  border: 1px solid #ca8a04;
+}
+
+#story .status-running {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid #22c55e;
+}
+
+#story .status-paused {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde047;
+  border: 1px solid #eab308;
+}
+
+#story .status-done {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid #3b82f6;
+}
+
+#story .status-failed {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid #ef4444;
+}
+
+/* Modal Body */
+#story .story-autopilot-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Budget & Spend Summary Card */
+#story .story-autopilot-budget-card {
+  background: var(--card2, #0d1a15);
+  border: 1px solid var(--line, #1d3128);
+  border-radius: 5px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#story .story-budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+#story .story-budget-label {
+  color: var(--muted, #93a39a);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+#story .story-budget-stats {
+  font-size: 11.5px;
+  color: var(--text, #e6f0ea);
+  font-weight: 600;
+}
+
+#story .story-budget-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(29, 49, 40, 0.6);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#story .story-budget-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+#story .fill-ok {
+  background: #22c55e;
+}
+
+#story .fill-warn {
+  background: #eab308;
+}
+
+#story .fill-danger {
+  background: #ef4444;
+}
+
+/* Stepper Cards */
+#story .story-autopilot-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#story .story-step-card {
+  background: var(--card2, #0d1a15);
+  border: 1px solid var(--line, #1d3128);
+  border-radius: 5px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+#story .story-step-card.active {
+  border-color: #ca8a04;
+  background: #0f231b;
+}
+
+#story .story-step-card.completed {
+  border-color: #1d4ed8;
+}
+
+#story .story-step-card.error {
+  border-color: #b91c1c;
+}
+
+#story .story-step-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#story .story-step-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#story .story-step-num {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(202, 138, 4, 0.15);
+  color: #fef08a;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(202, 138, 4, 0.3);
+}
+
+#story .story-step-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text, #e6f0ea);
+}
+
+#story .story-step-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+#story .badge-pending {
+  background: rgba(147, 163, 154, 0.1);
+  color: var(--muted, #93a39a);
+}
+
+#story .badge-running {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+#story .badge-done {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+#story .badge-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+#story .story-step-desc {
+  font-size: 11px;
+  color: var(--muted, #93a39a);
+  line-height: 1.35;
+}
+
+#story .story-step-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(29, 49, 40, 0.5);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#story .story-step-progress-fill {
+  height: 100%;
+  background: #22c55e;
+  transition: width 0.25s ease;
+}
+
+#story .story-step-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--muted, #93a39a);
+}
+
+/* Cost Gate Approval Box */
+#story .story-cost-gate-box {
+  background: rgba(202, 138, 4, 0.1);
+  border: 1px solid #ca8a04;
+  border-radius: 5px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#story .story-cost-gate-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fef08a;
+  letter-spacing: 0.2px;
+}
+
+#story .story-cost-gate-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text, #e6f0ea);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px;
+  border-radius: 4px;
+}
+
+#story .story-cost-gate-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Event Log Console */
+#story .story-autopilot-log-wrap {
+  border: 1px solid var(--line, #1d3128);
+  border-radius: 4px;
+  background: #040907;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#story .story-autopilot-log-header {
+  padding: 5px 10px;
+  background: var(--card2, #0d1a15);
+  border-bottom: 1px solid var(--line, #1d3128);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted, #93a39a);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#story .story-autopilot-log-content {
+  padding: 8px 10px;
+  height: 120px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: #c9d8d0;
+}
+
+#story .log-line {
+  margin-bottom: 3px;
+  word-break: break-word;
+}
+
+#story .log-time {
+  color: #64748b;
+  margin-right: 6px;
+}
+
+#story .log-tag-info {
+  color: #38bdf8;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+#story .log-tag-run {
+  color: #4ade80;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+#story .log-tag-qc {
+  color: #fbbf24;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+#story .log-tag-warn {
+  color: #facc15;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+#story .log-tag-err {
+  color: #f87171;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+#story .log-tag-success {
+  color: #34d399;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+/* Modal Footer */
+#story .story-autopilot-footer {
+  padding: 10px 16px;
+  background: var(--card2, #0d1a15);
+  border-top: 1px solid var(--line, #1d3128);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#story .story-autopilot-footer-left {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#story .story-autopilot-footer-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

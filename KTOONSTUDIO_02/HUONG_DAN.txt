@@ -1,0 +1,13 @@
+KTOONSTUDIO_02 — bảng node để test gen bằng API
+
+1. Key: dán vào keys.txt (hoặc để trong C:\Users\<tên>\.ktoon\keys.txt nếu đã có).
+2. Bấm đúp CHAY_KTOONSTUDIO.bat → trình duyệt mở bảng node. Giữ cửa sổ đen mở.
+3. Lần đầu có sẵn "Mẫu quy trình": Hồ sơ nhân vật → LLM viết prompt ảnh → Ảnh → Video.
+   - Thêm node bằng các nút trên cùng. Nối: kéo từ chấm phải của node này sang chấm trái node kia.
+   - Bấm vào dây để xoá dây. Kéo nền để di chuyển, lăn chuột để phóng to/thu nhỏ.
+   - Mỗi node có nút ▶ Chạy: hiện giá ước tính, bấm Chạy mới tốn tiền.
+   - Node Ảnh: nếu có ảnh nối vào thì tự dùng bản sửa ảnh (ảnh tham chiếu). Bấm ảnh nhỏ để chọn bản dùng tiếp.
+   - Node Video: ảnh nối vào thành @Image1, @Image2… theo thứ tự nối (hiện ngay trong node).
+   - "Tham số nâng cao": thêm tham số API dạng JSON, ví dụ {"resolution":"2k"}.
+4. Ảnh/video lưu ở data\media. Sổ chi: data\so_chi.csv. Nhật ký lỗi: data\nhat_ky.txt (không chứa key).
+Có lỗi thì gửi Claude dòng lỗi hiện trong node hoặc file nhat_ky.txt.

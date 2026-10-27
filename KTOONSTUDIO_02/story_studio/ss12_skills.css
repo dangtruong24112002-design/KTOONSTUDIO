@@ -1,0 +1,250 @@
+#ktoon-skill-manager[hidden] { display: none !important; }
+#ktoon-skill-manager {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgba(1, 7, 4, .78);
+  color: #e6ece8;
+  font-family: Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+#ktoon-skill-manager * { box-sizing: border-box; }
+#ktoon-skill-manager .ks-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: min(850px, 94vh);
+  overflow: hidden;
+  border: 1px solid #233a2e;
+  border-radius: 8px;
+  background: #07110c;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, .65);
+}
+#ktoon-skill-manager .ks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #1d3026;
+  background: #0a1710;
+}
+#ktoon-skill-manager .ks-kicker {
+  color: #e6b86a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+#ktoon-skill-manager h2 {
+  margin: 3px 0 4px;
+  color: #eef4f0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+#ktoon-skill-manager h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: #e9f0ec;
+  font-size: 13px;
+}
+#ktoon-skill-manager p {
+  margin: 0 0 12px;
+  color: #aabbb1;
+  font-size: 12px;
+  line-height: 1.55;
+}
+#ktoon-skill-manager .ks-status,
+#ktoon-skill-manager .ks-meta {
+  color: #93a39a;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+#ktoon-skill-manager .ks-close,
+#ktoon-skill-manager button {
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid #294336;
+  border-radius: 4px;
+  background: #102219;
+  color: #e6ece8;
+  font-family: inherit; font-size: 11px; font-weight: 400; line-height: 1.35;
+  font-size: 11px;
+  cursor: pointer;
+}
+#ktoon-skill-manager button:hover {
+  border-color: #d6ad63;
+  background: #182b20;
+}
+#ktoon-skill-manager button:focus-visible,
+#ktoon-skill-manager input:focus-visible,
+#ktoon-skill-manager select:focus-visible {
+  outline: 2px solid #e6b86a;
+  outline-offset: 2px;
+}
+#ktoon-skill-manager .ks-content {
+  padding: 16px 22px 20px;
+  overflow-y: auto;
+}
+#ktoon-skill-manager .ks-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #1a2e23;
+  border-radius: 6px;
+  background: #09150f;
+}
+#ktoon-skill-manager .ks-actions,
+#ktoon-skill-manager .ks-github-row,
+#ktoon-skill-manager .ks-preview-row {
+  display: flex;
+  gap: 8px;
+}
+#ktoon-skill-manager .ks-github-row,
+#ktoon-skill-manager .ks-preview-row {
+  margin-top: 10px;
+}
+#ktoon-skill-manager input[type="url"],
+#ktoon-skill-manager input[type="text"],
+#ktoon-skill-manager select {
+  min-width: 0;
+  height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #243a2e;
+  border-radius: 4px;
+  background: #050c08;
+  color: #e6ece8;
+  font-family: inherit; font-size: 11px; font-weight: 400; line-height: 1.35;
+  font-size: 11px;
+}
+#ktoon-skill-manager input[type="url"],
+#ktoon-skill-manager .ks-preview-row input {
+  flex: 1;
+}
+#ktoon-skill-manager input::placeholder { color: #75877d; }
+#ktoon-skill-manager .ks-global {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #e8f0eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#ktoon-skill-manager .ks-global input { accent-color: #4da77a; }
+#ktoon-skill-manager .ks-small { margin: 8px 0 0 24px; font-size: 10.5px; }
+#ktoon-skill-manager .ks-count {
+  min-width: 21px;
+  padding: 2px 6px;
+  border: 1px solid #314a3a;
+  border-radius: 10px;
+  color: #d7bc7b;
+  font-size: 10px;
+  text-align: center;
+}
+#ktoon-skill-manager .ks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+#ktoon-skill-manager .ks-card {
+  padding: 12px;
+  border: 1px solid #20362a;
+  border-radius: 5px;
+  background: #07100b;
+}
+#ktoon-skill-manager .ks-card-head,
+#ktoon-skill-manager .ks-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#ktoon-skill-manager .ks-name {
+  margin-bottom: 4px;
+  color: #f0d18d;
+  font-size: 13px;
+  font-weight: 700;
+}
+#ktoon-skill-manager .ks-mode { width: 160px; }
+#ktoon-skill-manager .ks-description,
+#ktoon-skill-manager .ks-requirement {
+  margin-top: 9px;
+  color: #d2ded7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+#ktoon-skill-manager .ks-requirement { color: #b9c9bf; }
+#ktoon-skill-manager .ks-note,
+#ktoon-skill-manager .ks-trust {
+  margin-top: 9px;
+  padding: 8px 10px;
+  border-left: 2px solid #d3a64f;
+  background: #171307;
+  color: #decf9f;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+#ktoon-skill-manager details {
+  margin-top: 9px;
+  color: #bac9c0;
+  font-size: 10.5px;
+}
+#ktoon-skill-manager summary { cursor: pointer; }
+#ktoon-skill-manager pre {
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid #18291f;
+  border-radius: 4px;
+  background: #040906;
+  color: #cdd8d1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 10.5px/1.5 Consolas, monospace;
+}
+#ktoon-skill-manager .ks-card-foot { margin-top: 10px; }
+#ktoon-skill-manager .ks-card-foot .ks-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#ktoon-skill-manager .ks-danger { color: #ffb3a8; }
+#ktoon-skill-manager .ks-empty {
+  padding: 22px 12px;
+  border: 1px dashed #294336;
+  border-radius: 4px;
+  color: #92a399;
+  font-size: 11px;
+  text-align: center;
+}
+#ktoon-skill-manager .ks-preview-result {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid #233c2d;
+  border-radius: 4px;
+  background: #0c1c12;
+  color: #cfe3d6;
+  font-size: 11px;
+}
+#ktoon-skill-manager .ks-message {
+  margin-top: 8px;
+  color: #e8c980;
+  font-size: 11px;
+}
+@media (max-width: 620px) {
+  #ktoon-skill-manager { padding: 8px; }
+  #ktoon-skill-manager .ks-header { padding: 13px; }
+  #ktoon-skill-manager .ks-content { padding: 10px; }
+  #ktoon-skill-manager .ks-card-head { align-items: flex-start; flex-direction: column; }
+  #ktoon-skill-manager .ks-mode { width: 100%; }
+  #ktoon-skill-manager .ks-actions,
+  #ktoon-skill-manager .ks-github-row,
+  #ktoon-skill-manager .ks-preview-row { flex-direction: column; }
+}
+
