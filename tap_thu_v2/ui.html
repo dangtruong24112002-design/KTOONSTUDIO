@@ -545,7 +545,7 @@ function secVideoEditing(force) {
   updateSec($("#main"), "video-editing",
     [sources.map(j => [j.id, j.status, j.file, j.url]), edits.map(j => [j.id, j.status, j.file, j.url, j.error, j.cost, j.cost_unknown]), S.keys.eachlabs, S.video_editing_skill],
     () => '<section class="card"><h1>AI sửa video · Skill video-editing</h1>' +
-      '<p class="hint">KTOONSTUDIO nạp hướng dẫn từ <code>tap_thu_v2/video-editing-SKILL.md</code> và gửi yêu cầu qua each::sense. Chế độ Max ưu tiên chất lượng; kết quả còn tùy clip, model và dịch vụ.</p>' +
+      '<p class="hint">KTOONSTUDIO nạp hướng dẫn từ <code>tap_thu_v2/skills/video-editing/SKILL.md</code> và gửi yêu cầu qua each::sense. Chế độ Max ưu tiên chất lượng; kết quả còn tùy clip, model và dịch vụ.</p>' +
       '<p class="hint">Clip và mô tả sẽ được gửi tới each::labs. Nếu clip chỉ nằm trên máy, app tải tạm clip lên WaveSpeed để tạo URL công khai cho dịch vụ xử lý.</p>' +
       '<div class="row"><label style="flex:2 1 300px">Clip nguồn<select id="videoEditSource" ' + (sources.length ? "" : "disabled") + '>' +
       (sourceOptions || '<option value="">Chưa có video sẵn sàng</option>') + '</select></label>' +
