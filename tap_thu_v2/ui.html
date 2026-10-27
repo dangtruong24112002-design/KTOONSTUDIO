@@ -813,6 +813,7 @@ function secSettings(force) {
         <input type="password" id="keyWavespeed" placeholder="dán key WaveSpeed mới…" autocomplete="off"></label>
       <label style="flex:1 1 220px">Atlas Cloud ${kp.atlas ? `<span class="chip">hiện tại: ${esc(kp.atlas)}</span>` : '<span class="muted">chưa có key</span>'}
         <input type="password" id="keyAtlas" placeholder="dán key Atlas Cloud mới…" autocomplete="off"></label></div>
+      <div class="row"><label style="flex:1 1 220px">each::labs API key<input type="password" id="keyEachlabs" placeholder="dán key each::labs mới…" autocomplete="off"></label></div>
       <div class="row"><button class="primary" data-act="save-keys">Lưu key</button></div>
       <div class="stephead">Thư mục dữ liệu dự án (ảnh, video, state, so_chi.csv)</div>
       <p class="hint">Hiện đang lưu ở: <code>${esc(S.data_dir || "")}</code>. Đổi đường dẫn rồi Lưu — cần khởi động lại app (đóng cửa sổ đen, mở lại) để áp dụng.
@@ -867,10 +868,10 @@ function secSettings(force) {
 function secCost(force) {
   updateSec($("#main"), "cost", [S.cost, S.by_stage, S.balance, S.jobs.filter(j => j.measured).map(j => j.id)], () => {
     const c = S.cost;
-    const order = ["split_episodes","parse_list","preprod","reflib_scan","suggest_components","portrait","sheet","env_wide","env_rev","prop","storyboard","prompt","review","gen","fix_img","patch","critique"];
+    const order = ["split_episodes","parse_list","preprod","reflib_scan","suggest_components","portrait","sheet","env_wide","env_rev","prop","storyboard","prompt","review","gen","fix_img","patch","critique","video_edit"];
     const rows = order.filter(k => S.by_stage[k]).map(k => { const b = S.by_stage[k];
       return `<tr><td>${esc(S.stage_names[k] || k)}</td><td class="num">${b.done}</td><td class="num">${b.failed}</td><td class="num">${b.active}</td><td class="num">${usd(b.spent, 3)}</td></tr>`; }).join("");
-    const bal = ["wavespeed", "atlas"].map(p => { const b = S.balance[p] || {}; const name = p === "atlas" ? "Atlas Cloud" : "WaveSpeed";
+    const bal = ["wavespeed", "atlas", "eachlabs"].map(p => { const b = S.balance[p] || {}; const name = p === "atlas" ? "Atlas Cloud" : p === "eachlabs" ? "each::labs" : "WaveSpeed";
       return `<tr><td>${name}${S.keys[p] ? "" : ' <span class="muted">(chưa có key)</span>'}</td><td class="num">${b.start != null ? usd(b.start, 2) : "—"}</td><td class="num">${b.now != null ? usd(b.now, 2) : "—"}</td><td class="num">${b.start != null && b.now != null ? usd(b.start - b.now, 3) : "—"}</td></tr>`; }).join("");
     const measured = S.jobs.filter(j => j.measured);
     return `<section class="card"><h1>13. Chi phí</h1><div class="kpis">
@@ -943,7 +944,7 @@ document.addEventListener("click", async e => {
     switch (d.act) {
       case "run": await runStage(d.stage, d.target, d.redo === "1"); break;
       case "pick": { const j = jobById(d.job); if (!j || j.status !== "done") { if (j && j.error) toast(j.error, j.status !== "cancelled"); break; } const r = await api("/api/pick", {job: d.job}); if (r.error) toast(r.error, true); await refresh(); break; }
-      case "reload-keys": { const r = await api("/api/reload_keys", {}); toast(`WaveSpeed: ${r.keys.wavespeed ? "có key" : "chưa có"} · Atlas: ${r.keys.atlas ? "có key" : "chưa có"} · trần ${usd(r.budget, 2)}`); setTimeout(() => refresh(), 1500); break; }
+      case "reload-keys": { const r = await api("/api/reload_keys", {}); toast(`WaveSpeed: ${r.keys.wavespeed ? "có key" : "chưa có"} · Atlas: ${r.keys.atlas ? "có key" : "chưa có"} · each::labs: ${r.keys.eachlabs ? "có key" : "chưa có"} · trần ${usd(r.budget, 2)}`); setTimeout(() => refresh(), 1500); break; }
       case "balance": case "balance-reset": { await api("/api/balance", {reset_start: d.act === "balance-reset"}); toast("Đã cập nhật số dư"); await refresh(); break; }
       case "discard-sec": { delete dirty[d.sec]; const el = document.getElementById("sec-" + d.sec); if (el) delete el.dataset.sig; if (document.activeElement) document.activeElement.blur(); await refresh(); break; }
       case "save-project": { const r = await api("/api/project", {name: $("#pname").value}); delete dirty.project; if (r.error) toast(r.error, true); else toast("Đã lưu"); await refresh(); break; }
@@ -1019,17 +1020,33 @@ document.addEventListener("click", async e => {
       case "save-keys": {
         const body = d.datadir ? {data_dir: $("#dataDirInput").value}
           : d.github ? {github_token: $("#githubToken").value, github_repo: $("#githubRepo").value}
-          : {wavespeed: $("#keyWavespeed").value, atlas: $("#keyAtlas").value};
-        if (!d.datadir && !d.github && !body.wavespeed && !body.atlas) { toast("Chưa dán key nào", true); break; }
+          : {wavespeed: $("#keyWavespeed").value, atlas: $("#keyAtlas").value, eachlabs: $("#keyEachlabs").value};
+        if (!d.datadir && !d.github && !body.wavespeed && !body.atlas && !body.eachlabs) { toast("Chưa dán key nào", true); break; }
         if (d.datadir && !body.data_dir.trim()) { toast("Chưa nhập đường dẫn", true); break; }
         if (d.github && !body.github_token.trim() && !body.github_repo.trim()) { toast("Chưa nhập gì", true); break; }
         const r = await api("/api/keys/save", body);
         delete dirty.settings;
         if ($("#keyWavespeed")) $("#keyWavespeed").value = "";
         if ($("#keyAtlas")) $("#keyAtlas").value = "";
+        if ($("#keyEachlabs")) $("#keyEachlabs").value = "";
         if ($("#githubToken")) $("#githubToken").value = "";
         if (r.error) toast(r.error, true); else toast(r.note || "Đã lưu");
         await refresh(); break; }
+      case "video-edit": {
+        const source = $("#videoEditSource") && $("#videoEditSource").value;
+        const prompt = $("#videoEditPrompt") && $("#videoEditPrompt").value.trim();
+        const mode = ($("#videoEditMode") && $("#videoEditMode").value) || "max";
+        if (!source || !prompt) { toast("Chọn clip và mô tả thay đổi trước.", true); break; }
+        const ok = await ask("Gửi video tới each::sense?",
+          "<p>Chế độ: <b>" + esc(mode) + "</b>. Chi phí do each::labs tính theo model, app không thể đặt trần chính xác trước khi gửi.</p>" +
+          "<p>Video và yêu cầu chỉnh sửa được gửi tới each::labs. Nếu clip là file local, app sẽ upload tạm qua WaveSpeed để tạo URL xử lý.</p>",
+          "Gửi và chỉnh sửa");
+        if (!ok) break;
+        const r = await api("/api/video/edit", {source_job: source, prompt, mode});
+        if (r.error) toast(r.error, true);
+        else { toast("Đã gửi tác vụ video-editing"); $("#videoEditPrompt").value = ""; }
+        await refresh(); break;
+      }
       case "check-update": {
         const r = await api("/api/update/check_now", {});
         if (r.error) toast(r.error, true); else toast("Đang kiểm tra cập nhật…");
