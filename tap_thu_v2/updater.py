@@ -30,7 +30,7 @@ import pipeline as P
 HERE = P.HERE
 GITHUB_API = os.environ.get("KTOON_GITHUB_API", "https://api.github.com")
 DEFAULT_REPO = "dangtruong24112002-design/KTOONSTUDIO"
-CODE_FILES = ["app.py", "pipeline.py", "providers.py", "updater.py", "ui.html"]
+CODE_FILES = ["app.py", "pipeline.py", "providers.py", "updater.py", "ui.html", "video-editing-SKILL.md"]
 VERSION_FILE = HERE / ".version.json"
 BACKUP_DIR = HERE / ".update_backup"
 CHECK_INTERVAL = float(os.environ.get("KTOON_UPDATE_INTERVAL", "120"))
