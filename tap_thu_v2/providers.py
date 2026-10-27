@@ -2,6 +2,7 @@
 Không có logic nghiệp vụ ở đây; pipeline.py quyết định gọi gì, khi nào, với body gì.
 """
 import json
+import re
 import mimetypes
 import shutil
 import time
@@ -184,3 +185,68 @@ class Atlas:
     def balance(self):
         r = http("GET", f"{self.pub_base}/balance", self.key, timeout=30)
         return float((r.get("available") or {}).get("value"))
+
+
+# ---------------------------------------------------------------- each::sense (built-in video-editing skill)
+class EachSense:
+    BASE = "https://eachsense-agent.core.eachlabs.run/v1"
+    BILLING_BASE = "https://api.eachlabs.ai/v1"
+
+    def __init__(self, key):
+        self.key = key
+
+    def edit_video(self, video_url, prompt, skill_guidance, mode="max"):
+        """Run the app's packaged video-editing recipe against one public video URL."""
+        system = (
+            "You are the KTOONSTUDIO video-editing executor. Follow the provided skill guidance. "
+            "Edit the attached source video according to the user's request. Use the selected quality mode. "
+            "Return the generated video through the API's media generations field; do not claim an edit "
+            "succeeded unless a resulting media URL is available.\n\n"
+            + skill_guidance
+        )
+        body = {
+            "model": "eachsense/beta",
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": video_url}},
+                ]},
+            ],
+            "stream": False,
+            "mode": mode if mode in ("max", "eco") else "max",
+            "behavior": "agent",
+            "web_search": False,
+            "enable_safety_checker": True,
+        }
+        result = http("POST", self.BASE + "/chat/completions", self.key, body, timeout=900)
+        message = ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        if isinstance(message, list):
+            message = "".join(x.get("text", "") for x in message if isinstance(x, dict))
+        outputs = result.get("generations") or []
+        if isinstance(outputs, (str, dict)):
+            outputs = [outputs]
+        output_url = ""
+        for item in outputs:
+            candidate = item.get("url") or item.get("uri") if isinstance(item, dict) else item
+            if isinstance(candidate, str) and candidate.startswith("https://"):
+                output_url = candidate
+                break
+        if not output_url:
+            for candidate in re.findall(r"https://[^\s<>\"']+", str(message)):
+                if candidate.startswith("https://"):
+                    output_url = candidate.rstrip(".,)")
+                    break
+        if not output_url:
+            task_id = result.get("task_id")
+            suffix = f" (task {task_id})" if task_id else ""
+            raise ApiError("each::sense không trả về URL video đã render" + suffix + ": " + str(message)[:300])
+        return output_url, str(message)[:4000], result
+
+    def balance(self):
+        r = http("GET", self.BILLING_BASE + "/billing/balance", self.key, timeout=30)
+        d = r.get("data") or r
+        value = d.get("balance_usd")
+        if value is None:
+            raise ApiError("each::labs không trả về balance_usd.")
+        return float(value)
