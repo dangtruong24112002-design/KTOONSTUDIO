@@ -1,6 +1,6 @@
 """Self-update: poll GitHub for a new commit on main, download+apply it, hand off to a new process on the
 next port, roll back the file replace if the new process never comes up healthy. Spec
-docs/SPEC_TAP_THU_V2.md §18 (yêu cầu #6). Only ever touches the code files in CODE_FILES under tap_thu_v2/
+docs/SPEC_TAP_THU_V2.md §18 (yêu cầu #6). Only touches packaged app files and skill assets listed in CODE_FILES under tap_thu_v2/
 — never keys.txt, never anything under DATA_DIR. Test against the fake GitHub API in
 ktoon_tap_thu/tests_mock via KTOON_GITHUB_API.
 
@@ -30,7 +30,8 @@ import pipeline as P
 HERE = P.HERE
 GITHUB_API = os.environ.get("KTOON_GITHUB_API", "https://api.github.com")
 DEFAULT_REPO = "dangtruong24112002-design/KTOONSTUDIO"
-CODE_FILES = ["app.py", "pipeline.py", "providers.py", "updater.py", "ui.html", "video-editing-SKILL.md", "video-editing-SKILL-LICENSE.txt"]
+CODE_FILES = ["app.py", "pipeline.py", "providers.py", "updater.py", "ui.html",
+              "skills/video-editing/SKILL.md", "skills/video-editing/LICENSE.txt"]
 VERSION_FILE = HERE / ".version.json"
 BACKUP_DIR = HERE / ".update_backup"
 CHECK_INTERVAL = float(os.environ.get("KTOON_UPDATE_INTERVAL", "120"))
@@ -85,13 +86,18 @@ def latest_main_commit():
 
 
 def _extract_code_files(zip_bytes):
-    """{filename: bytes} for CODE_FILES found under .../tap_thu_v2/ inside the zipball."""
+    """{relative_path: bytes} for packaged files below tap_thu_v2/ in the zipball."""
     out = {}
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
         for name in z.namelist():
             parts = name.split("/")
-            if len(parts) >= 2 and parts[-2] == "tap_thu_v2" and parts[-1] in CODE_FILES:
-                out[parts[-1]] = z.read(name)
+            try:
+                app_index = parts.index("tap_thu_v2")
+            except ValueError:
+                continue
+            relative = "/".join(parts[app_index + 1:])
+            if relative in CODE_FILES:
+                out[relative] = z.read(name)
     return out
 
 
@@ -102,19 +108,27 @@ def _backup_current():
     for name in CODE_FILES:
         p = HERE / name
         if p.exists():
-            shutil.copy2(p, BACKUP_DIR / name)
+            backup = BACKUP_DIR / name
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, backup)
 
 
 def _restore_backup():
     for name in CODE_FILES:
         b = BACKUP_DIR / name
+        target = HERE / name
         if b.exists():
-            shutil.copy2(b, HERE / name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(b, target)
+        elif target.exists():
+            target.unlink()
 
 
 def _apply_files(files):
     for name, data in files.items():
-        (HERE / name).write_bytes(data)
+        target = HERE / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
 
 
 def jobs_mid_submit():
