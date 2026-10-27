@@ -2,7 +2,7 @@
 """KTOONSTUDIO · tập thử v2 (series + tập, batch Omni Reference). Xem docs/SPEC_TAP_THU_V2.md §15.
 
 Bấm đúp chay_windows.bat (Windows) hoặc chay_mac.command (Mac): app mở giao diện trên trình duyệt.
-Key đọc từ keys.txt (WAVESPEED_API_KEY, ATLASCLOUD_API_KEY, BUDGET_USD), không bao giờ gửi ra
+Key đọc từ keys.txt (WAVESPEED_API_KEY, ATLASCLOUD_API_KEY, EACHLABS_API_KEY, BUDGET_USD), không bao giờ gửi ra
 trình duyệt hay ghi vào file khác. Chỉ dùng thư viện có sẵn của Python 3.8 trở lên.
 """
 import json
