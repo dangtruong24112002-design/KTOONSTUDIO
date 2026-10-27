@@ -1792,7 +1792,7 @@ def money():
         elif st == "running":
             spent += j.get("cost", 0) if j.get("pid") else 0
             reserved += 0 if j.get("pid") else j["est"]
-        elif st in ("done", "stalled"):
+        elif st in ("done", "stalled") or (st == "failed" and j.get("cost", 0) > 0):
             spent += j.get("cost", 0)
     return round(spent, 4), round(reserved, 4)
 
@@ -3038,7 +3038,7 @@ def cost_summary():
         if b.get("start") is not None and b.get("now") is not None:
             real = (real or 0) + b["start"] - b["now"]
     series_spent = round(sum(j.get("cost", 0) for j in STATE["jobs"].values()
-                              if j["kind"] in SERIES_KINDS and j["status"] in ("done", "stalled")), 4)
+                              if j["kind"] in SERIES_KINDS and (j["status"] in ("done", "stalled") or (j["status"] == "failed" and j.get("cost", 0) > 0))), 4)
     episode_spent = round(spent - series_spent, 4)
     basis = real if real is not None else spent
     basis_episode = max(0.0, basis - series_spent)
@@ -3076,7 +3076,7 @@ def public_state():
                 b["failed"] += 1
             else:
                 b["active"] += 1
-            if j["status"] in ("done", "stalled") or (j["status"] == "running" and j.get("pid")):
+            if j["status"] in ("done", "stalled") or (j["status"] == "running" and j.get("pid")) or (j["status"] == "failed" and j.get("cost", 0) > 0):
                 b["spent"] = round(b["spent"] + j.get("cost", 0), 4)
         mapping = {}
         for ep in STATE["episodes"].values():
