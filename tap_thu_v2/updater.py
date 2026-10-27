@@ -170,11 +170,14 @@ def check_and_apply(current_port, force=False):
             P.log(f"Không hỏi được GitHub để kiểm tra cập nhật: {P.scrub(str(e))}")
             return f"Không hỏi được GitHub: {e}"
         cur = current_version()
-        if not cur.get("sha"):
+        missing_local = [name for name in CODE_FILES if not (HERE / name).is_file()]
+        if not cur.get("sha") and not missing_local:
             _write_version(sha, when)
             return "Đã ghi nhận phiên bản hiện tại (lần đầu chạy)."
-        if sha == cur.get("sha"):
+        if sha == cur.get("sha") and not missing_local:
             return "Đã là bản mới nhất."
+        if missing_local:
+            P.log(f"Thiếu file app {missing_local} — sẽ đồng bộ lại gói hiện tại.")
         if not force and jobs_mid_submit():
             return "Có việc đang gửi — chờ đợt kiểm tra sau (2 phút) để không cắt ngang."
         P.log(f"Cập nhật: có commit mới {sha[:7]} trên GitHub, đang tải…")
