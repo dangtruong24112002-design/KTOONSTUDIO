@@ -210,6 +210,11 @@ class Handler(BaseHTTPRequestHandler):
             return {"error": str(e)}
 
     def _route(self, path, d):
+        if path == "/api/video/edit":
+            result = P.create_video_edit_job(d.get("source_job"), d.get("prompt"), d.get("mode", "max"))
+            if result.get("ok") and result.get("job"):
+                threading.Thread(target=P.run_video_edit, args=(result["job"],), daemon=True).start()
+            return result
         if path == "/api/run":
             return P.create_jobs(d.get("stage"), d.get("target") or None, bool(d.get("redo")), bool(d.get("dry")))
         if path == "/api/pick":
@@ -249,6 +254,8 @@ class Handler(BaseHTTPRequestHandler):
                 updates[P.KEY_OF["wavespeed"]] = str(d["wavespeed"]).strip()
             if "atlas" in d and str(d["atlas"]).strip():
                 updates[P.KEY_OF["atlas"]] = str(d["atlas"]).strip()
+            if "eachlabs" in d and str(d["eachlabs"]).strip():
+                updates[P.KEY_OF["eachlabs"]] = str(d["eachlabs"]).strip()
             if "data_dir" in d and str(d["data_dir"]).strip():
                 updates["DATA_DIR"] = str(d["data_dir"]).strip()
             if "github_token" in d and str(d["github_token"]).strip():
