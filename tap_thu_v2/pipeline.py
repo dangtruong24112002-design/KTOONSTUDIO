@@ -217,7 +217,7 @@ SERIES_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "preprod", "
 PROHIBITED = ("no subtitles, no BGM (unless explicitly requested), no exaggerated movements, no extra dialogue, "
               "no runny nose or premature tears, no AI-feel artifacts, no fast cuts when the shot is one continuous take")
 
-VIDEO_EDITING_SKILL_FILE = HERE / "video-editing-SKILL.md"
+VIDEO_EDITING_SKILL_FILE = HERE / "skills" / "video-editing" / "SKILL.md"
 VIDEO_EDITING_SKILL_FALLBACK = """## Editing Capabilities
 Apply color grading, speed changes, style transfer, enhancement, trimming, effects, aspect-ratio changes, and transitions.
 ## Prompt Tips
@@ -246,7 +246,7 @@ def video_editing_skill_guidance():
 
 def video_editing_skill_status():
     return {"name": "video-editing", "available": True,
-            "source": "tap_thu_v2/video-editing-SKILL.md" if VIDEO_EDITING_SKILL_FILE.is_file() else "bundled fallback"}
+            "source": "tap_thu_v2/skills/video-editing/SKILL.md" if VIDEO_EDITING_SKILL_FILE.is_file() else "bundled fallback"}
 
 SHOT_SCHEMA = ('{"id": "SH01", "duration": int (4-15 seconds), "location": "short location name", '
                '"cast": ["character name", ...], "props": ["prop name", ...], '
