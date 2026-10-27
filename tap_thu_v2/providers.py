@@ -234,7 +234,7 @@ class EachSense:
                 break
         if not output_url:
             for candidate in re.findall(r"https://[^\s<>\"']+", str(message)):
-                if candidate.startswith("https://"):
+                if candidate.startswith("https://") and candidate.rstrip(".,)") != video_url:
                     output_url = candidate.rstrip(".,)")
                     break
         if not output_url:
