@@ -232,7 +232,7 @@ function chatPanel(kind, id) {
 function renderHeader() {
   const m = S.money, b = S.budget, pct = Math.min(100, (m.spent + m.reserved) / b * 100);
   const runN = S.jobs.filter(j => ACTIVE.includes(j.status)).length;
-  const keys = ["wavespeed", "atlas"].map(p => `${p === "atlas" ? "Atlas" : "WaveSpeed"}: ${S.keys[p] ? "có key" : "chưa có key"}`).join(" · ");
+  const keys = ["wavespeed", "atlas", "eachlabs"].map(p => `${p === "atlas" ? "Atlas" : p === "eachlabs" ? "each::labs" : "WaveSpeed"}: ${S.keys[p] ? "có key" : "chưa có key"}`).join(" · ");
   const ver = (S.update && S.update.version) || {};
   const verStr = ver.sha ? `Phiên bản: ${esc(ver.sha.slice(0, 7))} · ${esc((ver.t || "").replace("T", " ").slice(0, 16))}` : "Phiên bản: chưa rõ";
   $("#meters").innerHTML =
@@ -242,7 +242,7 @@ function renderHeader() {
     `<div class="meter"><span class="muted">${esc(verStr)}</span></div>` +
     `<button data-act="reload-keys">Đọc lại keys.txt</button>`;
   const jumps = [["#sec-script", "Kịch bản"], ["#sec-list", "Danh sách"], ["#sec-templates", "Prompt mẫu"], ["#sec-knowledge", "Thư viện kiến thức"], ["#sec-reflib", "Kho ref"],
-                 ["#sec-chars", "Nhân vật"], ["#sec-envs", "Bối cảnh"], ["#sec-props", "Prop"], ["#sec-settings", "Cài đặt"]]
+                 ["#sec-chars", "Nhân vật"], ["#sec-envs", "Bối cảnh"], ["#sec-props", "Prop"], ["#sec-video-editing", "AI sửa video"], ["#sec-settings", "Cài đặt"]]
     .concat((S.episodes_order || []).map(eid => ["#ep-" + eid, eid])).concat([["#sec-cost", "Chi phí"]]);
   $("#jump").innerHTML = jumps.map(([href, label]) => `<button data-jump="${href}">${esc(label)}</button>`).join("");
 }
@@ -522,11 +522,42 @@ function secVoices(force) {
 }
 function secRefs(force) {
   updateSec($("#main"), "videorefs", [S.video_refs, S.jobs.filter(j => j.kind === "video_ref").map(j => j.id + j.status + j.file)],
-    () => `<section class="card"><h2>Video ref (tham chiếu chuyển động)</h2>
-      <div class="row"><input id="newRefName" placeholder="tên" style="width:180px"><button data-act="new-ref">+ Video ref</button></div></section>
-      <div class="grid">${Object.values(S.video_refs).map(refCard).join("") || '<p class="muted">Chưa có video ref.</p>'}</div>`, force);
+    () => '<section class="card"><h2>Video ref (tham chiếu chuyển động)</h2>' +
+      '<div class="row"><input id="newRefName" placeholder="tên" style="width:180px"><button data-act="new-ref">+ Video ref</button></div></section>' +
+      '<div class="grid">' + (Object.values(S.video_refs).map(refCard).join("") || '<p class="muted">Chưa có video ref.</p>') + '</div>', force);
 }
-
+function secVideoEditing(force) {
+  const sources = S.jobs.filter(j => ["video_ref", "gen", "patch", "video_edit"].includes(j.kind) && j.status === "done" && (j.url || j.file));
+  const edits = S.jobs.filter(j => j.kind === "video_edit").slice().reverse();
+  const sourceOptions = sources.map((j, i) => '<option value="' + esc(j.id) + '"' + (i === sources.length - 1 ? " selected" : "") + '>' +
+    esc(j.label || j.id) + ' · ' + esc(j.id) + '</option>').join("");
+  const history = edits.map(j => {
+    const status = j.status === "done" ? "Hoàn tất" : ACTIVE.includes(j.status) ? "Đang xử lý" : j.status === "failed" ? "Lỗi" : j.status;
+    return '<article class="tile"><div class="head"><b>' + esc(j.label || j.id) + '</b><span class="chip">' + esc(status) + '</span></div>' +
+      '<div class="muted">Nguồn: ' + esc(j.base_take || j.target) + ' · chế độ ' + esc(j.mode || "max") +
+      (j.cost_unknown ? ' · chưa đối soát chi phí' : j.cost ? ' · ' + usd(j.cost, 4) : '') + '</div>' +
+      (j.url || j.file ? '<video class="media m169" src="' + esc(src(j)) + '" controls preload="metadata"></video>' : '') +
+      (j.status === "failed" ? '<div class="err">' + esc(j.error || "Tác vụ thất bại") + '</div>' : '') +
+      (j.dl_error ? '<p class="hint">Không lưu được bản tải về; vẫn có URL xem video.</p>' : '') +
+      (j.result ? '<details><summary>Phản hồi each::sense</summary><pre>' + esc(j.result) + '</pre></details>' : '') +
+      '</article>';
+  }).join("");
+  updateSec($("#main"), "video-editing",
+    [sources.map(j => [j.id, j.status, j.file, j.url]), edits.map(j => [j.id, j.status, j.file, j.url, j.error, j.cost, j.cost_unknown]), S.keys.eachlabs, S.video_editing_skill],
+    () => '<section class="card"><h1>AI sửa video · Skill video-editing</h1>' +
+      '<p class="hint">KTOONSTUDIO nạp hướng dẫn từ <code>tap_thu_v2/video-editing-SKILL.md</code> và gửi yêu cầu qua each::sense. Chế độ Max ưu tiên chất lượng; kết quả còn tùy clip, model và dịch vụ.</p>' +
+      '<p class="hint">Clip và mô tả sẽ được gửi tới each::labs. Nếu clip chỉ nằm trên máy, app tải tạm clip lên WaveSpeed để tạo URL công khai cho dịch vụ xử lý.</p>' +
+      '<div class="row"><label style="flex:2 1 300px">Clip nguồn<select id="videoEditSource" ' + (sources.length ? "" : "disabled") + '>' +
+      (sourceOptions || '<option value="">Chưa có video sẵn sàng</option>') + '</select></label>' +
+      '<label>Chất lượng<select id="videoEditMode"><option value="max" selected>Max · chất lượng cao</option><option value="eco">Eco · tiết kiệm hơn</option></select></label></div>' +
+      '<label>Yêu cầu chỉnh sửa<textarea id="videoEditPrompt" rows="4" maxlength="4000" placeholder="Ví dụ: Apply a warm cinematic grade, preserve natural skin tones, and add a gentle fade-in. Use timestamps for changes tied to specific moments."></textarea></label>' +
+      '<div class="row between"><span class="muted">each::labs key: ' + (S.keys.eachlabs ? "đã cấu hình" : "chưa có — thêm trong Cài đặt") + '</span>' +
+      '<button class="primary" data-act="video-edit" ' + (!sources.length || !S.keys.eachlabs ? "disabled" : "") + '>Chỉnh video bằng AI</button></div>' +
+      '<p class="hint">Skill được tích hợp sẵn. Thêm key each::labs trong Cài đặt. Chi phí do each::labs tính; app thử đối chiếu bằng biến động số dư nhưng có thể chưa cập nhật ngay.</p>' +
+      (S.video_editing_skill ? '<span class="chip">Skill: ' + esc(S.video_editing_skill.source || "đã nạp") + '</span>' : '') +
+      '</section>' + (history ? '<section class="card"><h2>Lịch sử chỉnh sửa video</h2><div class="grid">' + history + '</div></section>' : ''),
+    force);
+}
 function storyboardCard(sh) {
   const img = pickOf("storyboard", sh.id);
   return `<div class="tile"><div class="head"><b>${esc(sh.id)}</b><span class="muted">${sh.duration}s · ${esc(sh.location)}</span></div>
@@ -863,7 +894,7 @@ function renderAll(force) {
   if (!S) return;
   renderHeader();
   secProject(force); secScript(force); secList(force); secTemplates(force); secKnowledge(force); secReflib(force);
-  secChars(force); secEnvs(force); secProps(force); secVoices(force); secRefs(force);
+  secChars(force); secEnvs(force); secProps(force); secVoices(force); secRefs(force); secVideoEditing(force);
   secSettings(force);
   secEpisodesAll(force);
   secCost(force);
