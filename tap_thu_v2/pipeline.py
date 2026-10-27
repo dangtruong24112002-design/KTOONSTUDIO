@@ -87,8 +87,8 @@ ATLAS_PUB_BASE = os.environ.get("KTOON_ATLAS_PUB", "https://api.atlascloud.ai/pu
 POLL_SLEEP = float(os.environ.get("KTOON_POLL", "0.4"))
 MEASURE_WAIT = float(os.environ.get("KTOON_MEASURE_WAIT", "0.3"))
 PRICE_WARN_PER_S = 0.16
-KEY_OF = {"wavespeed": "WAVESPEED_API_KEY", "atlas": "ATLASCLOUD_API_KEY"}
-PROVIDER_NAME = {"wavespeed": "WaveSpeed", "atlas": "Atlas Cloud"}
+KEY_OF = {"wavespeed": "WAVESPEED_API_KEY", "atlas": "ATLASCLOUD_API_KEY", "eachlabs": "EACHLABS_API_KEY"}
+PROVIDER_NAME = {"wavespeed": "WaveSpeed", "atlas": "Atlas Cloud", "eachlabs": "each::labs"}
 VND_PER_USD = 26170
 TARGET_VND = 30_000_000
 CONTRACT_VND = 50_000_000
@@ -206,7 +206,7 @@ STAGE_NAME = {"split_episodes": "Tách kịch bản thành các tập", "parse_l
               "storyboard": "Storyboard", "frame": "Cắt khung hình", "fix_img": "Ảnh sửa", "prompt": "Prompt",
               "review": "Duyệt prompt (Gemini)", "gen": "Sinh video", "patch": "Vá đoạn", "critique": "Nhận xét ảnh",
               "condense_knowledge": "Rút gọn tài liệu", "shotlist_from_script": "Viết shot list từ kịch bản (GPT)",
-              "kb_librarian": "Thủ thư đọc tài liệu"}
+              "kb_librarian": "Thủ thư đọc tài liệu", "video_edit": "AI sửa video (video-editing skill)"}
 LLM_KINDS = {"split_episodes", "parse_list", "preprod", "reflib_scan", "suggest_components", "prompt", "review",
              "critique", "condense_knowledge", "shotlist_from_script"}
 IMAGE_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "fix_img", "storyboard"}
@@ -216,6 +216,37 @@ SERIES_KINDS = {"portrait", "sheet", "env_wide", "env_rev", "prop", "preprod", "
 
 PROHIBITED = ("no subtitles, no BGM (unless explicitly requested), no exaggerated movements, no extra dialogue, "
               "no runny nose or premature tears, no AI-feel artifacts, no fast cuts when the shot is one continuous take")
+
+VIDEO_EDITING_SKILL_FILE = HERE / "video-editing-SKILL.md"
+VIDEO_EDITING_SKILL_FALLBACK = """## Editing Capabilities
+Apply color grading, speed changes, style transfer, enhancement, trimming, effects, aspect-ratio changes, and transitions.
+## Prompt Tips
+Describe the target look with concrete color, contrast, mood, and texture details. Use timestamps for changes tied to moments. For reference-based edits, describe the visual qualities to match.
+## Common Pitfalls
+Avoid vague requests. Natural-language edits may not produce frame-accurate cuts unless timestamps are supplied. Apply complex effects in stages. Source quality limits enhancement results."""
+
+def video_editing_skill_guidance():
+    """Read the installed skill at runtime; keep a safe, shell-free fallback for older self-updaters."""
+    try:
+        text = VIDEO_EDITING_SKILL_FILE.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    sections = []
+    for start, end in (("## Editing Capabilities", "## Prompt Tips"),
+                       ("## Prompt Tips", "## Examples"),
+                       ("## Common Pitfalls", "## Related Skills")):
+        i = text.find(start)
+        j = text.find(end, i + len(start)) if i >= 0 else -1
+        if i >= 0 and j > i:
+            section = text[i:j]
+            section = re.sub(r"(?s)\x60\x60\x60.*?\x60\x60\x60", "", section).strip()
+            if section:
+                sections.append(section)
+    return "\n\n".join(sections) if sections else VIDEO_EDITING_SKILL_FALLBACK
+
+def video_editing_skill_status():
+    return {"name": "video-editing", "available": True,
+            "source": "tap_thu_v2/video-editing-SKILL.md" if VIDEO_EDITING_SKILL_FILE.is_file() else "bundled fallback"}
 
 SHOT_SCHEMA = ('{"id": "SH01", "duration": int (4-15 seconds), "location": "short location name", '
                '"cast": ["character name", ...], "props": ["prop name", ...], '
@@ -1690,6 +1721,10 @@ def atlas_client():
     return providers.Atlas(ATLAS_BASE, ATLAS_PUB_BASE, key_for("atlas"))
 
 
+def eachsense_client():
+    return providers.EachSense(key_for("eachlabs"))
+
+
 def read_balance(provider):
     key = KEYS.get(KEY_OF[provider])
     if not key:
@@ -1697,7 +1732,9 @@ def read_balance(provider):
     try:
         if provider == "wavespeed":
             return providers.WaveSpeed(WS_BASE, WS_LLM_BASE, key).balance()
-        return providers.Atlas(ATLAS_BASE, ATLAS_PUB_BASE, key).balance()
+        if provider == "atlas":
+            return providers.Atlas(ATLAS_BASE, ATLAS_PUB_BASE, key).balance()
+        return providers.EachSense(key).balance()
     except Exception as e:
         log(f"Không đọc được số dư {PROVIDER_NAME[provider]}: {e}")
         return None
@@ -2300,6 +2337,123 @@ def create_chat_attachment(data, ext, label, source, use):
     return job
 
 
+def create_video_edit_job(source_job_id, prompt, mode="max"):
+    """Queue one user-approved video edit with the packaged video-editing skill."""
+    prompt = str(prompt or "").strip()
+    mode = str(mode or "max").strip().lower()
+    if not prompt:
+        return {"error": "Hãy mô tả thay đổi video muốn thực hiện."}
+    if len(prompt) > 4000:
+        return {"error": "Mô tả tối đa 4000 ký tự."}
+    if mode not in ("max", "eco"):
+        return {"error": "Chất lượng phải là max hoặc eco."}
+    with LOCK:
+        if not KEYS.get(KEY_OF["eachlabs"]):
+            return {"error": "Chưa có EACHLABS_API_KEY. Hãy thêm key each::labs trong Cài đặt."}
+        source = STATE["jobs"].get(str(source_job_id or ""))
+        if not source or source.get("status") != "done":
+            return {"error": "Clip nguồn chưa sẵn sàng hoặc không tồn tại."}
+        if source.get("kind") not in ("video_ref", "gen", "patch", "video_edit"):
+            return {"error": "Chỉ nhận video tham chiếu hoặc video đã render."}
+        if not source.get("url") and not source.get("file"):
+            return {"error": "Clip nguồn không có URL hoặc file trên máy."}
+        if source.get("file") and not source.get("url") and not KEYS.get(KEY_OF["wavespeed"]):
+            return {"error": "Clip đang nằm trên máy; cần WAVESPEED_API_KEY để tạo URL tạm cho each::sense."}
+        if any(j.get("provider") == "eachlabs" and j.get("status") in ("queued", "starting", "running")
+               for j in STATE["jobs"].values()):
+            return {"error": "Đang có một tác vụ each::sense chạy. Chờ xong rồi gửi tiếp."}
+        spent, reserved = money()
+        if spent + reserved >= budget():
+            return {"error": "Đã chạm trần chi phí của lần thử này."}
+        job = _new_job("video_edit", source["id"], "eachlabs", "eachsense/beta", 1, 0.0,
+                       f"AI sửa video · {source.get('label') or source['id']}",
+                       {"base_take": source["id"], "edit_prompt": prompt, "mode": mode,
+                        "cost_unknown": True, "skill": "video-editing"})
+    save()
+    log(f"Xếp hàng sửa video {source['id']} bằng video-editing skill (each::sense, mode={mode})")
+    return {"ok": True, "job": job["id"]}
+
+
+def _video_edit_charge(jid, before, after):
+    charge = None
+    if before is not None and after is not None:
+        delta = round(max(0.0, float(before) - float(after)), 4)
+        if delta > 0:
+            charge = delta
+    with LOCK:
+        job = STATE["jobs"].get(jid)
+        if not job:
+            return None
+        if before is not None:
+            bal = STATE["balance"].setdefault("eachlabs", {})
+            if bal.get("start") is None:
+                bal["start"], bal["start_t"] = before, ts()
+        if after is not None:
+            bal = STATE["balance"].setdefault("eachlabs", {})
+            bal["now"], bal["t"] = after, ts()
+        if charge is not None:
+            job.update(cost=charge, est=charge, unit_price=charge, cost_unknown=False)
+            job["measured"] = {"before": before, "after": after, "charge": charge,
+                               "note": "Đối chiếu số dư each::labs; số dư có thể cập nhật trễ."}
+        else:
+            job["cost_unknown"] = True
+    save()
+    return charge
+
+
+def run_video_edit(jid):
+    with LOCK:
+        job = STATE["jobs"].get(jid)
+        if not job:
+            return
+        job["status"] = "running"
+        source = STATE["jobs"].get(job.get("base_take"))
+        prompt, mode = job.get("edit_prompt", ""), job.get("mode", "max")
+    save()
+    before = read_balance("eachlabs")
+    _video_edit_charge(jid, before, before)
+    try:
+        if not source or source.get("status") != "done":
+            raise ApiError("Không còn clip nguồn đã duyệt.")
+        video_url = url_of(source)
+        if not video_url.startswith("https://"):
+            raise ApiError("Clip nguồn phải có URL HTTPS công khai để gửi tới each::sense.")
+        skill = video_editing_skill_guidance()
+        output_url, response_text, response = eachsense_client().edit_video(
+            video_url, prompt, skill, mode=mode)
+        task_id = response.get("task_id")
+        with LOCK:
+            job = STATE["jobs"][jid]
+            job.update(url=output_url, result=response_text, task_id=task_id,
+                       submitted=ts(), status="running")
+        save()
+        ext = providers.ext_for(output_url)
+        if ext == ".bin":
+            ext = ".mp4"
+        dest = _dest_for(job, ext)
+        try:
+            providers.download(output_url, dest)
+            with LOCK:
+                job["file"] = str(dest.relative_to(DATA_DIR))
+        except Exception as e:
+            with LOCK:
+                job["dl_error"] = scrub(str(e))
+            log(f"Không tải được video đã sửa về máy; vẫn giữ URL xem trước ({e})")
+        after = read_balance("eachlabs")
+        charge = _video_edit_charge(jid, before, after)
+        with LOCK:
+            job = STATE["jobs"][jid]
+            job.update(status="done", t_end=ts())
+            STATE["picks"][f"video_edit:{job['target']}"] = jid
+        save()
+        ledger(STATE["jobs"][jid], "xong" if charge is not None else "xong — chi phí chưa đối soát", charge or 0)
+        log(f"Xong {jid}" + (f" · chi phí đo được {charge:.4f} USD" if charge is not None else " · chi phí each::labs chưa đối soát"))
+    except Exception as e:
+        after = read_balance("eachlabs")
+        charge = _video_edit_charge(jid, before, after)
+        finish_fail(jid, str(e), keep_cost=charge is not None)
+
+
 def create_jobs(stage, target=None, redo=False, dry=False):
     with LOCK:
         specs, err = specs_for(stage, target, redo)
@@ -2740,7 +2894,10 @@ def apply_measured_price(bid, model, per_unit):
 
 def run_job(jid):
     try:
-        if STATE["jobs"][jid]["kind"] in LLM_KINDS:
+        kind = STATE["jobs"][jid]["kind"]
+        if kind == "video_edit":
+            run_video_edit(jid)
+        elif kind in LLM_KINDS:
             run_llm(jid)
         else:
             run_media(jid)
@@ -2876,7 +3033,7 @@ def do_export(eid):
 def cost_summary():
     spent, reserved = money()
     real = None
-    for p in ("wavespeed", "atlas"):
+    for p in ("wavespeed", "atlas", "eachlabs"):
         b = STATE["balance"].get(p, {})
         if b.get("start") is not None and b.get("now") is not None:
             real = (real or 0) + b["start"] - b["now"]
@@ -2904,7 +3061,7 @@ def public_state():
         jobs = [{k: j.get(k) for k in ("id", "kind", "target", "take", "status", "model", "est", "cost", "error",
                                         "file", "url", "last_frame", "created", "label", "tokens", "units",
                                         "unit_price", "prompt", "dl_error", "result", "provider", "measure", "measured",
-                                        "dur", "edit", "resolution", "knowledge_used")}
+                                        "dur", "edit", "resolution", "knowledge_used", "base_take", "edit_prompt", "mode", "cost_unknown", "skill", "task_id")}
                 for j in sorted(STATE["jobs"].values(), key=lambda j: j["n"])]
         todo = {}
         for stage in ("split_episodes", "parse_list", "preprod", "reflib_scan", "portrait", "sheet", "env_wide", "env_rev", "prop", "prompt", "review", "gen"):
@@ -2943,4 +3100,5 @@ def public_state():
                 "running": len(RUNNING), "stage_names": STAGE_NAME,
                 "series_kinds": sorted(SERIES_KINDS), "mapping": mapping, "model_catalog": full_model_catalog(),
                 "knowledge": kb_docs, "knowledge_conflicts": kb_conflicts, "slots": SLOTS, "slot_name": SLOT_NAME,
-                "condense_word_threshold": CONDENSE_WORD_THRESHOLD, "dialogue_wps": DIALOGUE_WPS}
+                "condense_word_threshold": CONDENSE_WORD_THRESHOLD, "dialogue_wps": DIALOGUE_WPS,
+                "video_editing_skill": video_editing_skill_status()}
